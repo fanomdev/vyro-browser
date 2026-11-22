@@ -83,7 +83,7 @@ function renderTabs() {
     if (!renderedTabIds.has(t.id)) el.classList.add('tab-enter');
     el.innerHTML = `<span class="fav"></span><span class="label"></span><span class="tab-close" title="Close tab"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>`;
     el.querySelector('.label').textContent = (t.group ? t.group + ' · ' : '') + (t.title || t.url || 'New Tab');
-    el.onclick = (e) => { if (dragMoved || e.target.closest('.tab-close')) return; activateTab(t.id); };
+    el.onclick = (e) => { if (e.target.closest('.tab-close')) return; activateTab(t.id); };
     el.querySelector('.tab-close').onclick = (e) => { e.stopPropagation(); closeTab(t.id); };
     el.oncontextmenu = (e) => { e.preventDefault(); showTabMenu(e.clientX, e.clientY, t.id, t.group); };
     strip.appendChild(el);
@@ -110,10 +110,9 @@ function renderTabs() {
   }
 }
 
-let dragMoved = false;
 function bindTabStripScrolling() {
   const strip = $('#tabstrip');
-  // Wheel over the strip or any tab scrolls horizontally.
+  // Wheel only — pointer drags belong to Tauri's window drag region.
   strip.addEventListener('wheel', (e) => {
     if (strip.scrollWidth <= strip.clientWidth) return;
     e.preventDefault();
@@ -121,44 +120,6 @@ function bindTabStripScrolling() {
     const delta = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
     strip.scrollLeft += delta * unit;
   }, { passive: false });
-
-  let drag = null;
-  strip.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.tab-close')) return;
-    const tab = e.target.closest('.tab');
-    drag = { x: e.clientX, scroll: strip.scrollLeft, tab, id: tab ? Number(tab.dataset.tabId) : null, moved: false };
-    dragMoved = false;
-  });
-  window.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    const dx = e.clientX - drag.x;
-    if (Math.abs(dx) > 5) {
-      drag.moved = true; dragMoved = true; strip.classList.add('dragging');
-      if (drag.tab) drag.tab.classList.add('reordering');
-    }
-    if (!drag.moved) return;
-    if (drag.tab) {
-      const tabs = [...strip.querySelectorAll('.tab:not(.tab-exit)')];
-      const moving = drag.tab;
-      const before = tabs.find(t => e.clientX < t.getBoundingClientRect().left + t.getBoundingClientRect().width / 2);
-      if (before && before !== moving) strip.insertBefore(moving, before);
-      else if (!before && tabs.length && tabs[tabs.length - 1] !== moving) strip.appendChild(moving);
-    } else {
-      strip.scrollLeft = drag.scroll - dx;
-    }
-  });
-  window.addEventListener('pointerup', async () => {
-    if (!drag) return;
-    const finished = drag; drag = null;
-    strip.classList.remove('dragging');
-    if (finished.tab) finished.tab.classList.remove('reordering');
-    if (finished.tab && finished.moved) {
-      const index = [...strip.querySelectorAll('.tab:not(.tab-exit)')].indexOf(finished.tab);
-      try { S.tabs = await invoke('tab_move', { id: finished.id, index }); renderTabs(); }
-      catch (err) { toast(err); renderTabs(); }
-    }
-    setTimeout(() => { dragMoved = false; }, 0);
-  });
 }
 function renderAddress() {
   const t = activeTab();

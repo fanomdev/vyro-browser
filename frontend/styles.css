@@ -65,11 +65,9 @@ button { cursor: pointer; }
 .tab-scroll:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .tab-scroll:disabled { opacity: .25; cursor: default; }
 .tab-scroll svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.tabstrip { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 4px; height: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding-top: 5px; cursor: grab; }
-.tabstrip.dragging { cursor: grabbing; }
+.tabstrip { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 4px; height: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding-top: 5px; }
 .tab-enter { animation: tabIn 180ms cubic-bezier(.2,.8,.2,1) both; transform-origin: left center; }
 .tab-exit { animation: tabOut 170ms ease-in both; pointer-events: none; transform-origin: left center; }
-.tab.reordering { opacity: .75; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
 @keyframes tabIn { from { opacity: 0; transform: translateY(6px) scaleX(.7); } to { opacity: 1; transform: none; } }
 @keyframes tabOut { to { opacity: 0; transform: translateY(-6px) scaleX(.6); } }
 .tabstrip::-webkit-scrollbar { display: none; }
