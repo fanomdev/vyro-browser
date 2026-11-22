@@ -8,14 +8,14 @@ The pure-Rust core is compiled and tested independently of the webview shell:
 cargo test --manifest-path vyro-core/Cargo.toml
 ```
 
-Result on rustc 1.100.0 (windows-gnu): **43 passed, 0 failed**.
+Result on rustc 1.100.0 (windows-gnu): **44 passed, 0 failed**.
 
 Coverage by module:
 
 | Module | Tests | What is verified |
 |---|---|---|
 | `adblock` | 10 | comment/header parsing, domain anchors, subdomain matching, lookalike rejection, `@@` exceptions, `$script` resource filter, `$third-party`, site allowlist, global toggle, per-domain stats, wildcard/`^` matcher |
-| `tabs` | 3 | navigate + back/forward stacks, active-tab fallback on close, tab groups |
+| `tabs` | 4 | navigate + back/forward stacks, repeated new-tab creates distinct tabs, active-tab fallback on close, tab groups |
 | `bookmarks` | 4 | CRUD/search/folders, update/remove, Netscape HTML import, JSON roundtrip |
 | `history` | 3 | visit aggregation, search/most-visited, selective clear |
 | `downloads` | 2 | lifecycle + progress fraction, cancel/clear |

@@ -120,9 +120,10 @@ button { cursor: pointer; }
 .shield:hover { background: rgba(53,214,232,.13); }
 .shield svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .shield-count {
-  position: absolute; right: -4px; bottom: -2px; min-width: 16px; height: 16px; padding: 0 4px;
+  position: absolute; right: -5px; bottom: -3px; min-width: 16px; height: 16px; padding: 0 4px;
   border-radius: 9px; background: var(--accent); color: #fff; font-size: 9px; font-weight: 800;
   line-height: 16px; text-align: center; font-variant-numeric: tabular-nums;
+  border: 2px solid #1a1a2a; box-sizing: content-box;
 }
 .address { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 13px; letter-spacing: -.005em; }
 .address::placeholder { color: var(--faint); }
