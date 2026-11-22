@@ -38,16 +38,26 @@ What is not:
   (`wg-quick`, `openvpn`, vendor CLI). With no provider or no command, `connect()`
   returns an error by design (unit-tested).
 - Credentials come from a named environment variable; they are never persisted.
-- **Kill switch** and **DNS leak protection** are settings/flags only. Enforcing them
-  requires OS firewall and DNS changes by the provider backend — not implemented.
+- The **kill switch is app-level**: when the VPN disconnects, VYRO gates all
+  navigation until the user restores it. It is **not** an OS firewall rule and does
+  not stop other applications from reaching the network.
+- **DNS leak protection** remains a settings flag; enforcing it requires provider-level
+  DNS routing — not implemented.
 - No provider is bundled; no private keys or API keys are shipped.
 
-## 4. Privacy / security features not yet real
+## 4. Privacy / security features and their limits
 
-- **Fingerprinting protection** is a settings flag only; no mitigations are applied.
-- **Safe Browsing** is a settings flag only; no Google Safe Browsing API integration.
+- **Fingerprinting protection** now applies real in-page mitigations (navigator,
+  screen, canvas, audio, WebGL, timezone). It is best-effort: a determined script can
+  still find entropy, and the injected overrides are not a security boundary.
+- **Safe Browsing** uses a bundled starter denylist and, when `VYRO_SAFE_BROWSING_KEY`
+  is set, real Google Safe Browsing API v5 lookups. The bundled list is small — this
+  is not the full Google threat feed. Without a key, verdicts are honestly `Unverified`.
 - **Private browsing** is represented in tab state but does not isolate storage/cookies.
-- **Secure password storage** is not implemented.
+- **Secure password storage** is implemented as an encrypted vault (Argon2 + AES-256-GCM).
+  The master password is never written to disk; the key lives only in memory. It does
+  not integrate with OS credential stores or offer password sync.
+- **Companions** are first-party VYRO scripts, not Chrome extensions.
 - **Third-party cookie control** is core policy logic; it is not yet enforced by the
   webview's cookie store.
 - **Site permission decisions** are stored and displayed, but camera/mic/location/
@@ -57,8 +67,9 @@ What is not:
 
 - Downloads: lifecycle state exists; actual byte transfer is not wired to the webview
   download handler.
-- Find-on-page, reader mode, zoom UI, fullscreen, context menus, swipe navigation,
-  tab-group UI, and automatic session restoration are not implemented.
+- Find-on-page (`Ctrl+F` or toolbar), reader mode, and a tab right-click menu with
+  grouping are implemented. Zoom UI, fullscreen, swipe navigation, and automatic
+  session restoration are still missing.
 - Address-bar autocomplete is not wired to the UI (history query API exists).
 - Import/export: JSON bookmarks export and Netscape HTML import work; Chrome/Firefox
   full-profile import does not.

@@ -86,6 +86,15 @@ impl History {
         self.entries.clear();
     }
 
+    /// Restore entries from a previous session without duplicating URLs.
+    pub fn import(&mut self, entries: Vec<HistoryEntry>) {
+        for e in entries {
+            if !self.entries.iter().any(|x| x.url == e.url) {
+                self.entries.push(e);
+            }
+        }
+    }
+
     /// Remove everything visited strictly before `cutoff` (unix seconds).
     pub fn clear_before(&mut self, cutoff: u64) -> usize {
         let before = self.entries.len();

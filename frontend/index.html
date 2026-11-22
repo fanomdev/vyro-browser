@@ -61,6 +61,12 @@
     </div>
 
     <div class="tool-buttons">
+      <button id="tool-find" class="icon-btn" title="Find on page (Ctrl+F)" aria-label="Find on page">
+        <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>
+      </button>
+      <button id="tool-reader" class="icon-btn" title="Reader mode" aria-label="Reader mode">
+        <svg viewBox="0 0 24 24"><path d="M12 6c-2-1.5-4.5-1.5-7 0v13c2.5-1.5 5-1.5 7 0 2-1.5 4.5-1.5 7 0V6c-2.5-1.5-5-1.5-7 0zM12 6v13"/></svg>
+      </button>
       <button class="icon-btn" data-panel="sidebar" title="Sidebar" aria-label="Sidebar">
         <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM9 4v16"/></svg>
       </button>
@@ -82,6 +88,12 @@
     </div>
   </div>
 
+  <!-- ============ KILL-SWITCH BANNER ============ -->
+  <div id="gate-banner" class="gate-banner hidden">
+    <span>VPN connection dropped — browsing is paused by the kill switch.</span>
+    <button class="btn" id="gate-restore">Restore browsing</button>
+  </div>
+
   <!-- ============ SIDEBAR ============ -->
   <aside id="sidebar-panel" class="sidebar hidden">
     <div class="side-head"><span class="brand-name">VYRO</span><button class="close-inline side-close" data-close aria-label="Close sidebar">×</button></div>
@@ -91,6 +103,8 @@
     <button class="side-item" data-panel="privacy"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.4 8.4-8 9-4.6-.6-8-4-8-9V6z"/></svg> Privacy</button>
     <button class="side-item" data-panel="vpn"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7zM8 12l3 3 5-6"/></svg> VPN</button>
     <button class="side-item" data-panel="extensions"><svg viewBox="0 0 24 24"><path d="M10 4h4v3h3v4h3v4h-3v3h-4v-3h-4v3H6v-3H3v-4h3V7h4z"/></svg> Extensions</button>
+    <button class="side-item" data-panel="companions"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3m13-5h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3m13 5h3a2 2 0 002-2v-3M9 9h6v6H9z"/></svg> Companions</button>
+    <button class="side-item" data-panel="passwords"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3m-4 4v3"/></svg> Passwords</button>
     <button class="side-item" data-panel="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 00-1.7-1L14.7 3h-4l-.3 2.6a7 7 0 00-1.6 1l-2.3-1-2 3.4 2 1.5a7 7 0 000 2l-2 1.5 2 3.4 2.3-1a7 7 0 001.6 1l.3 2.6h4l.3-2.6a7 7 0 001.7-1l2.3 1 2-3.4-2-1.5c.1-.3.1-.7.1-1z"/></svg> Settings</button>
     <div class="side-foot">Browse Beyond Limits.</div>
   </aside>
@@ -119,6 +133,13 @@
       <div class="card">
         <h2>Top blocked domains</h2>
         <div id="p-top-domains" class="list"></div>
+      </div>
+      <div class="card"><h2>Safe Browsing</h2>
+        <label class="row"><span>Enable threat checks</span><input type="checkbox" id="sb-enabled" class="switch"></label>
+        <p class="muted" id="sb-status">Checking configuration…</p>
+        <div class="row"><input id="sb-domain" placeholder="malicious.example" /><button class="btn" id="sb-add">Add to threat list</button></div>
+        <div id="sb-domains" class="chips"></div>
+        <p class="muted">Set <code>VYRO_SAFE_BROWSING_KEY</code> to enable real Google Safe Browsing lookups. No key is bundled.</p>
       </div>
       <div class="card">
         <h2>Site permissions</h2>
@@ -206,6 +227,38 @@
         Back to browsing
       </button></div>
       <div class="card"><div id="dl-list" class="list"></div></div>
+    </section>
+
+    <section class="panel" data-name="passwords">
+      <div class="panel-head"><div><h1>Passwords</h1><p>Encrypted vault — only ciphertext touches disk.</p></div><button class="panel-back" data-close>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        Back to browsing
+      </button></div>
+      <div class="card"><h2>Master password</h2>
+        <div class="row"><input id="vault-master" type="password" placeholder="Master password" />
+          <button class="btn primary" id="vault-init">Create vault</button>
+          <button class="btn" id="vault-unlock">Unlock</button>
+          <button class="btn ghost" id="vault-lock">Lock</button></div>
+        <p class="muted" id="vault-status">Locked</p>
+      </div>
+      <div class="card"><h2>Saved credentials</h2>
+        <div class="row"><input id="vault-service" placeholder="Site" /><input id="vault-user" placeholder="Username" /><input id="vault-pass" type="password" placeholder="Password" /><button class="btn" id="vault-add">Save</button></div>
+        <div id="vault-list" class="list"></div>
+      </div>
+    </section>
+
+    <section class="panel" data-name="companions">
+      <div class="panel-head"><div><h1>Companions</h1><p>First-party scripts injected into matching pages.</p></div><button class="panel-back" data-close>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        Back to browsing
+      </button></div>
+      <div class="notice" id="companion-note"></div>
+      <div class="card"><h2>Install a companion</h2>
+        <div class="row"><input id="comp-id" placeholder="id" /><input id="comp-name" placeholder="Name" /><input id="comp-match" placeholder="*example.com*" /></div>
+        <textarea id="comp-code" rows="5" placeholder="// JavaScript injected into matching pages"></textarea>
+        <button class="btn primary" id="comp-install">Install companion</button>
+      </div>
+      <div class="card"><h2>Installed</h2><div id="comp-list" class="list"></div></div>
     </section>
 
     <section class="panel" data-name="settings">

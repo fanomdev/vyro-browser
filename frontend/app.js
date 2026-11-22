@@ -42,6 +42,9 @@ function listenForState() {
     const data = payload?.payload ?? payload;
     if (data?.tabs) { S.tabs = data.tabs; renderTabs(); renderAddress(); }
     if (data?.blocker) { S.blocker = data.blocker; renderShield(); }
+    if (typeof data?.network_gated === 'boolean') {
+      $('#gate-banner').classList.toggle('hidden', !data.network_gated);
+    }
   };
   const listen = async () => {
     if (!T.transformCallback) throw new Error('no transformCallback');
@@ -68,9 +71,10 @@ function renderTabs() {
     const el = document.createElement('div');
     el.className = 'tab' + (t.active ? ' active' : '') + (t.private ? ' private' : '');
     el.innerHTML = `<span class="fav"></span><span class="label"></span><span class="tab-close" title="Close tab"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>`;
-    el.querySelector('.label').textContent = t.title || t.url || 'New Tab';
-    el.onclick = (e) => { if (e.target.classList.contains('tab-close')) return; activateTab(t.id); };
+    el.querySelector('.label').textContent = (t.group ? t.group + ' · ' : '') + (t.title || t.url || 'New Tab');
+    el.onclick = (e) => { if (e.target.closest('.tab-close')) return; activateTab(t.id); };
     el.querySelector('.tab-close').onclick = (e) => { e.stopPropagation(); closeTab(t.id); };
+    el.oncontextmenu = (e) => { e.preventDefault(); showTabMenu(e.clientX, e.clientY, t.id, t.group); };
     strip.appendChild(el);
   }
 }
@@ -130,6 +134,8 @@ async function openPanel(name) {
   if (name === 'history') await renderHistory();
   if (name === 'bookmarks') await renderBookmarks();
   if (name === 'downloads') await renderDownloads();
+  if (name === 'passwords') await renderVault();
+  if (name === 'companions') await renderCompanions();
   if (name === 'settings') await renderSettings();
 }
 async function closePanels(showContent = true) {
@@ -189,6 +195,14 @@ async function renderPrivacy() {
   try {
     const vpn = await invoke('vpn_state');
     $('#p-vpn').textContent = vpnLabel(vpn.status) === 'Disconnected' ? 'Off' : 'On';
+  } catch (_) {}
+  try {
+    const sb = await invoke('safe_browsing_state');
+    $('#sb-enabled').checked = !!sb.enabled;
+    $('#sb-status').textContent = sb.remote_available
+      ? 'Remote threat service configured and key present.'
+      : 'Local denylist active. No API key configured — set VYRO_SAFE_BROWSING_KEY for remote checks.';
+    $('#sb-domains').innerHTML = sb.domains.map(d => `<span class="chip">${esc(d)}</span>`).join('');
   } catch (_) {}
 }
 
@@ -266,6 +280,40 @@ async function renderDownloads() {
   } catch (e) { toast(e); }
 }
 
+/* --------------------------- vault & companions --------------------------- */
+async function renderVault() {
+  try {
+    const st = await invoke('vault_state');
+    $('#vault-status').textContent = !st.initialized
+      ? 'No vault yet — create a master password.'
+      : st.unlocked ? `Unlocked · ${st.count} credential(s)` : 'Locked';
+    const items = st.unlocked ? await invoke('vault_list') : [];
+    $('#vault-list').innerHTML = items.map(([id, service, user]) =>
+      `<div class="list-item"><span class="grow"><b>${esc(service)}</b><br><span class="sub">${esc(user)}</span></span>
+       <button class="btn ghost vault-show" data-id="${id}">Reveal</button>
+       <button class="btn ghost vault-del" data-id="${id}">✕</button></div>`).join('') || '<div class="muted">No saved credentials.</div>';
+    $$('.vault-show').forEach(b => b.onclick = async () => {
+      try { const pw = await invoke('vault_reveal', { id: Number(b.dataset.id) }); toast(`Password: ${pw}`); }
+      catch (e) { toast(e); }
+    });
+    $$('.vault-del').forEach(b => b.onclick = async () => {
+      await invoke('vault_remove', { id: Number(b.dataset.id) }); renderVault();
+    });
+  } catch (e) { toast(e); }
+}
+async function renderCompanions() {
+  try {
+    const data = await invoke('companion_list');
+    $('#companion-note').innerHTML = `<b>VYRO companion format.</b> ${esc(data.note || '')}`;
+    $('#comp-list').innerHTML = data.items.map(c =>
+      `<div class="list-item"><span class="grow"><b>${esc(c.name)}</b> <span class="sub">${esc(c.id)}</span><br><span class="sub">${esc(c.matches.join(', '))}</span></span>
+       <label class="row"><span>Enabled</span><input type="checkbox" class="switch comp-toggle" data-id="${esc(c.id)}" ${c.enabled ? 'checked' : ''}></label>
+       <button class="btn ghost comp-del" data-id="${esc(c.id)}">Remove</button></div>`).join('') || '<div class="muted">No companions installed.</div>';
+    $$('.comp-toggle').forEach(el => el.onchange = async () => { await invoke('companion_toggle', { id: el.dataset.id, enabled: el.checked }); });
+    $$('.comp-del').forEach(el => el.onclick = async () => { await invoke('companion_remove', { id: el.dataset.id }); renderCompanions(); });
+  } catch (e) { toast(e); }
+}
+
 /* --------------------------- settings --------------------------- */
 async function renderSettings() {
   const s = S.settings; if (!s) return;
@@ -301,6 +349,33 @@ async function saveSettings() {
 }
 
 /* --------------------------- helpers --------------------------- */
+function showTabMenu(x, y, id, group) {
+  $$('.tab-menu').forEach(m => m.remove());
+  const menu = document.createElement('div');
+  menu.className = 'tab-menu';
+  menu.style.left = Math.min(x, window.innerWidth - 210) + 'px';
+  menu.style.top = Math.min(y, window.innerHeight - 170) + 'px';
+  const groups = [...new Set(S.tabs.map(t => t.group).filter(Boolean))];
+  const items = [
+    ['New group…', async () => {
+      const name = prompt('Group name'); if (name) { await invoke('tab_set_group', { id, group: name }); refreshLight(); }
+    }],
+    ...groups.map(g => [g, async () => { await invoke('tab_set_group', { id, group: g }); refreshLight(); }]),
+    ['Remove from group', async () => { await invoke('tab_set_group', { id, group: null }); refreshLight(); }],
+    ['Close tab', () => closeTab(id)],
+  ];
+  items.forEach(([label, fn]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.onclick = async () => { menu.remove(); await fn(); };
+    menu.appendChild(b);
+  });
+  document.body.appendChild(menu);
+  setTimeout(() => {
+    const close = e => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', close); } };
+    document.addEventListener('mousedown', close);
+  }, 0);
+}
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
 async function patch(key, value) {
   S.settings[key] = value;
@@ -393,6 +468,54 @@ function bindUI() {
   };
 
   $('#s-save').onclick = saveSettings;
+
+  $('#tool-find').onclick = async () => {
+    try { await invoke('find_in_page', { id: S.activeId, query: '' }); } catch (e) { toast(e); }
+  };
+  $('#tool-reader').onclick = async () => {
+    try { await invoke('reader_mode', { id: S.activeId }); toast('Reader mode toggled'); } catch (e) { toast(e); }
+  };
+  $('#gate-restore').onclick = async () => {
+    await invoke('set_network_gate', { enabled: false });
+    $('#gate-banner').classList.add('hidden');
+    toast('Browsing restored');
+  };
+
+  $('#sb-enabled').onchange = async e => {
+    await invoke('safe_browsing_toggle', { enabled: e.target.checked });
+    renderPrivacy();
+  };
+  $('#sb-add').onclick = async () => {
+    await invoke('safe_browsing_add_domain', { domain: $('#sb-domain').value });
+    $('#sb-domain').value = ''; renderPrivacy();
+  };
+
+  $('#vault-init').onclick = async () => {
+    try { await invoke('vault_init', { master: $('#vault-master').value }); $('#vault-master').value = ''; renderVault(); toast('Vault created'); }
+    catch (e) { toast(e); }
+  };
+  $('#vault-unlock').onclick = async () => {
+    try { await invoke('vault_unlock', { master: $('#vault-master').value }); $('#vault-master').value = ''; renderVault(); toast('Vault unlocked'); }
+    catch (e) { toast(e); }
+  };
+  $('#vault-lock').onclick = async () => { await invoke('vault_lock'); renderVault(); };
+  $('#vault-add').onclick = async () => {
+    try {
+      await invoke('vault_add', { service: $('#vault-service').value, username: $('#vault-user').value, password: $('#vault-pass').value });
+      $('#vault-service').value = $('#vault-user').value = $('#vault-pass').value = ''; renderVault();
+    } catch (e) { toast(e); }
+  };
+  $('#comp-install').onclick = async () => {
+    try {
+      await invoke('companion_install', {
+        id: $('#comp-id').value || ('comp-' + Date.now()), name: $('#comp-name').value,
+        matches: $('#comp-match').value.split(',').map(s => s.trim()).filter(Boolean),
+        code: $('#comp-code').value
+      });
+      $('#comp-id').value = $('#comp-name').value = $('#comp-match').value = $('#comp-code').value = '';
+      renderCompanions(); toast('Companion installed; open a new tab to apply it');
+    } catch (e) { toast(e); }
+  };
 
   document.addEventListener('keydown', (e) => {
     const mod = e.ctrlKey || e.metaKey;

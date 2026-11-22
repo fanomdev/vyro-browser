@@ -13,15 +13,18 @@
 
 pub mod adblock;
 pub mod bookmarks;
+pub mod companions;
 pub mod downloads;
 pub mod engine;
 pub mod extensions;
 pub mod history;
 pub mod platform;
 pub mod privacy;
+pub mod safe_browsing;
 pub mod settings;
 pub mod storage;
 pub mod tabs;
+pub mod vault;
 pub mod vpn;
 
 /// VYRO product constants — single source of truth for branding.

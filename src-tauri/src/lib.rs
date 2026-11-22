@@ -13,6 +13,8 @@ use std::sync::Mutex;
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, Webview, WebviewUrl, Wry};
 use vyro_core::adblock::{Blocker, ResourceType};
 use vyro_core::bookmarks::BookmarkStore;
+use vyro_core::companions::CompanionManager;
+use vyro_core::safe_browsing::{SafeBrowsing, Verdict};
 use vyro_core::downloads::DownloadManager;
 use vyro_core::engine::{resolve, SearchEngine};
 use vyro_core::extensions::{ExtensionManager, SupportReport};
@@ -21,6 +23,7 @@ use vyro_core::platform::data_dir;
 use vyro_core::privacy::{Decision, Permission, PrivacyController};
 use vyro_core::settings::Settings;
 use vyro_core::tabs::TabManager;
+use vyro_core::vault::Vault;
 use vyro_core::vpn::{VpnManager, VpnProviderConfig};
 use vyro_core::APP_NAME;
 
@@ -41,6 +44,11 @@ pub struct AppState {
     settings: Mutex<Settings>,
     webviews: Mutex<HashMap<u64, TabWebview>>,
     data_dir: Mutex<PathBuf>,
+    safe_browsing: Mutex<SafeBrowsing>,
+    vault: Mutex<Vault>,
+    companions: Mutex<CompanionManager>,
+    /// App-level kill switch: blocks navigation when the VPN drops.
+    network_gate: Mutex<bool>,
 }
 
 #[derive(Serialize)]
@@ -85,51 +93,204 @@ fn host_of(url: &str) -> String {
         .to_ascii_lowercase()
 }
 
-/// In-page interception bridge. System webviews do not expose subresource
-/// request blocking, so this injects a script that rejects fetch/XHR/script/
-/// image loads to known tracker domains. Navigation-level blocking is done in
-/// Rust in `navigate`. See docs/LIMITATIONS.md.
-fn init_script(blocker: &Blocker) -> String {
+/// In-page bridge: ad/tracker interception, fingerprinting mitigations,
+/// find-on-page, reader mode, and first-party companion code. System webviews
+/// expose no general network interception, so this is a genuine but bounded
+/// layer — see docs/LIMITATIONS.md.
+fn init_script(blocker: &Blocker, fp: bool, companions: &str) -> String {
     let domains = serde_json::to_string(&blocker.blocked_domains()).unwrap_or_else(|_| "[]".into());
-    format!(
-        r#"
-(function(){{
-  var BLOCKED = new Set({domains});
-  function blocked(u) {{
-    try {{ var h = new URL(u, location.href).hostname.toLowerCase();
+    let mut script = r#"
+(function(){
+  var BLOCKED = new Set(__VYRO_DOMAINS__);
+  function blocked(u) {
+    try { var h = new URL(u, location.href).hostname.toLowerCase();
       for (var d of BLOCKED) if (h === d || h.endsWith('.' + d)) return true;
-    }} catch (e) {{}}
+    } catch (e) {}
     return false;
-  }}
-  function note(u) {{
+  }
+  function note(u) {
     window.__vyroBlocked = (window.__vyroBlocked || 0) + 1;
-    try {{ window.dispatchEvent(new CustomEvent('vyro-blocked', {{ detail: u }})); }} catch (e) {{}}
-  }}
+    try { window.dispatchEvent(new CustomEvent('vyro-blocked', { detail: u })); } catch (e) {}
+  }
   var of = window.fetch;
-  window.fetch = function(input) {{
+  window.fetch = function(input) {
     var u = typeof input === 'string' ? input : (input && input.url) || '';
-    if (blocked(u)) {{ note(u); return Promise.reject(new Error('VYRO: blocked')); }}
+    if (blocked(u)) { note(u); return Promise.reject(new Error('VYRO: blocked')); }
     return of.apply(this, arguments);
-  }};
+  };
   var oo = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(m, u) {{
-    if (blocked(String(u))) {{ note(String(u)); throw new Error('VYRO: blocked'); }}
+  XMLHttpRequest.prototype.open = function(m, u) {
+    if (blocked(String(u))) { note(String(u)); throw new Error('VYRO: blocked'); }
     return oo.apply(this, arguments);
-  }};
-  ['src'].forEach(function(prop) {{
-    [HTMLScriptElement, HTMLImageElement, HTMLIFrameElement].forEach(function(Ctor) {{
-      var d = Object.getOwnPropertyDescriptor(Ctor.prototype, prop);
-      if (!d) return;
-      Object.defineProperty(Ctor.prototype, prop, {{
-        get: function() {{ return d.get.call(this); }},
-        set: function(v) {{ if (blocked(String(v))) {{ note(String(v)); return; }} d.set.call(this, v); }}
-      }});
-    }});
-  }});
-}})();
-"#,
-        domains = domains
-    )
+  };
+  [HTMLScriptElement, HTMLImageElement, HTMLIFrameElement].forEach(function(Ctor) {
+    var d = Object.getOwnPropertyDescriptor(Ctor.prototype, 'src');
+    if (!d) return;
+    Object.defineProperty(Ctor.prototype, 'src', {
+      get: function() { return d.get.call(this); },
+      set: function(v) { if (blocked(String(v))) { note(String(v)); return; } d.set.call(this, v); }
+    });
+  });
+
+  /* ---- fingerprinting mitigation (opt-in) ---- */
+  if (__VYRO_FP__ === '1') {
+    try { Object.defineProperty(navigator, 'webdriver', { get: function(){ return undefined; } }); } catch(e){}
+    try { Object.defineProperty(navigator, 'plugins', { get: function(){ return []; } }); } catch(e){}
+    try { Object.defineProperty(navigator, 'mimeTypes', { get: function(){ return []; } }); } catch(e){}
+    try { Object.defineProperty(navigator, 'hardwareConcurrency', { get: function(){ return 4; } }); } catch(e){}
+    try { Object.defineProperty(navigator, 'deviceMemory', { get: function(){ return 4; } }); } catch(e){}
+    try { Object.defineProperty(navigator, 'languages', { get: function(){ return ['en-US','en']; } }); } catch(e){}
+    var screenVals = { width:1920, height:1080, availWidth:1920, availHeight:1040, colorDepth:24, pixelDepth:24 };
+    Object.keys(screenVals).forEach(function(k){ try { Object.defineProperty(screen, k, { get: (function(v){ return function(){ return v; }; })(screenVals[k]) }); } catch(e){} });
+    try { Object.defineProperty(window, 'devicePixelRatio', { get: function(){ return 1; } }); } catch(e){}
+    try {
+      var oldTz = Intl.DateTimeFormat.prototype.resolvedOptions;
+      Intl.DateTimeFormat.prototype.resolvedOptions = function(){ var o = oldTz.call(this); o.timeZone = 'UTC'; return o; };
+    } catch(e){}
+    try {
+      var oldGet = CanvasRenderingContext2D.prototype.getImageData;
+      CanvasRenderingContext2D.prototype.getImageData = function(){
+        var d = oldGet.apply(this, arguments);
+        if (d.data.length) { d.data[0] = (d.data[0] + 1) % 256; }
+        return d;
+      };
+      var oldData = HTMLCanvasElement.prototype.toDataURL;
+      HTMLCanvasElement.prototype.toDataURL = function(){
+        try {
+          var tmp = document.createElement('canvas'); tmp.width = this.width; tmp.height = this.height;
+          var c = tmp.getContext('2d'); c.drawImage(this, 0, 0);
+          var d = c.getImageData(0, 0, 1, 1); d.data[0] = (d.data[0] + 1) % 256; c.putImageData(d, 0, 0);
+          return oldData.apply(tmp, arguments);
+        } catch(e) { return oldData.apply(this, arguments); }
+      };
+    } catch(e){}
+    try {
+      var oldFreq = AnalyserNode.prototype.getFloatFrequencyData;
+      AnalyserNode.prototype.getFloatFrequencyData = function(a){
+        oldFreq.call(this, a);
+        for (var i = 0; i < a.length; i++) a[i] += (i % 2 ? 0.00001 : -0.00001);
+      };
+      var oldParam = WebGLRenderingContext.prototype.getParameter;
+      WebGLRenderingContext.prototype.getParameter = function(p){
+        if (p === 37445) return 'Google Inc. (VYRO)';
+        if (p === 37446) return 'ANGLE (VYRO, Software)';
+        return oldParam.call(this, p);
+      };
+    } catch(e){}
+  }
+
+  /* ---- find on page ---- */
+  var findStyle = document.createElement('style');
+  findStyle.textContent = '#vyro-findbar{position:fixed;top:12px;right:16px;z-index:2147483647;display:flex;' +
+    'align-items:center;gap:6px;padding:8px 10px;border-radius:10px;background:#151524;color:#f2f3f9;' +
+    'border:1px solid rgba(255,255,255,.18);box-shadow:0 12px 30px rgba(0,0,0,.45);font:13px system-ui}' +
+    '#vyro-findbar input{width:220px;padding:7px 10px;border-radius:7px;border:1px solid #3a3a55;' +
+    'background:#0d0d17;color:#fff;outline:none}#vyro-findbar input:focus{border-color:#7c5cff}' +
+    '#vyro-findbar span{min-width:56px;text-align:center;color:#9aa0b5;font-size:12px}' +
+    '#vyro-findbar button{width:26px;height:26px;border:0;border-radius:6px;background:transparent;color:#c9ccdb;cursor:pointer}' +
+    '#vyro-findbar button:hover{background:rgba(255,255,255,.12)}' +
+    'mark.vyro-find{background:rgba(124,92,255,.35);color:inherit;border-radius:2px}' +
+    'mark.vyro-find.active{background:#7c5cff;color:#fff}';
+  document.head.appendChild(findStyle);
+  window.__vyroFindState = { marks: [], index: 0, bar: null };
+  window.__vyroFindClose = function(){
+    var st = window.__vyroFindState;
+    st.marks.forEach(function(m){ try { m.replaceWith(document.createTextNode(m.textContent)); } catch(e){} });
+    st.marks = []; st.index = 0;
+    if (st.bar) { st.bar.remove(); st.bar = null; }
+  };
+  window.__vyroFindHighlight = function(){
+    var st = window.__vyroFindState;
+    st.marks.forEach(function(m, i){ m.classList.toggle('active', i === st.index); });
+    if (st.marks[st.index]) st.marks[st.index].scrollIntoView({ block: 'center' });
+  };
+  window.__vyroFindUpdate = function(){
+    var st = window.__vyroFindState, el = document.getElementById('vyro-findcount');
+    if (el) el.textContent = st.marks.length ? (st.index + 1) + ' / ' + st.marks.length : 'No results';
+  };
+  window.__vyroFind = function(q){
+    window.__vyroFindClose();
+    var st = window.__vyroFindState;
+    if (!st.bar) {
+      var bar = document.createElement('div'); bar.id = 'vyro-findbar';
+      bar.innerHTML = '<input id="vyro-findinput" placeholder="Find on page" spellcheck="false">' +
+        '<span id="vyro-findcount"></span>' +
+        '<button id="vyro-findprev" title="Previous">‹</button>' +
+        '<button id="vyro-findnext" title="Next">›</button>' +
+        '<button id="vyro-findclose" title="Close">×</button>';
+      document.documentElement.appendChild(bar);
+      document.getElementById('vyro-findinput').addEventListener('input', function(){ window.__vyroFind(this.value); });
+      document.getElementById('vyro-findprev').onclick = function(){ window.__vyroFindStep(-1); };
+      document.getElementById('vyro-findnext').onclick = function(){ window.__vyroFindStep(1); };
+      document.getElementById('vyro-findclose').onclick = window.__vyroFindClose;
+      st.bar = bar;
+    }
+    var input = document.getElementById('vyro-findinput');
+    if (input && q !== undefined && input.value !== q) input.value = q;
+    if (!q) { window.__vyroFindUpdate(); return 0; }
+    var needle = String(q).toLowerCase();
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(n){
+        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        var p = n.parentElement;
+        if (!p || /SCRIPT|STYLE|NOSCRIPT|MARK|INPUT|TEXTAREA/.test(p.tagName)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var nodes = [], n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    nodes.forEach(function(node){
+      var text = node.nodeValue, lower = text.toLowerCase(), ranges = [], from = 0, i;
+      while ((i = lower.indexOf(needle, from)) !== -1) { ranges.push([i, i + needle.length]); from = i + needle.length; }
+      if (!ranges.length) return;
+      var frag = document.createDocumentFragment(), pos = 0;
+      ranges.forEach(function(r){
+        if (r[0] > pos) frag.appendChild(document.createTextNode(text.slice(pos, r[0])));
+        var m = document.createElement('mark'); m.className = 'vyro-find'; m.textContent = text.slice(r[0], r[1]);
+        frag.appendChild(m); st.marks.push(m); pos = r[1];
+      });
+      if (pos < text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
+      node.parentNode.replaceChild(frag, node);
+    });
+    st.index = 0; window.__vyroFindHighlight(); window.__vyroFindUpdate();
+    return st.marks.length;
+  };
+  window.__vyroFindStep = function(dir){
+    var st = window.__vyroFindState;
+    if (!st.marks.length) return;
+    st.index = (st.index + dir + st.marks.length) % st.marks.length;
+    window.__vyroFindHighlight(); window.__vyroFindUpdate();
+  };
+  document.addEventListener('keydown', function(e){
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+      e.preventDefault(); window.__vyroFind('');
+      var inp = document.getElementById('vyro-findinput'); if (inp) inp.focus();
+    } else if (e.key === 'Enter' && document.activeElement && document.activeElement.id === 'vyro-findinput') {
+      e.preventDefault(); window.__vyroFindStep(e.shiftKey ? -1 : 1);
+    } else if (e.key === 'Escape') {
+      window.__vyroFindClose();
+    }
+  });
+
+  /* ---- reader mode ---- */
+  window.__vyroReader = function(){
+    var old = document.getElementById('vyro-reader-style');
+    if (old) { old.remove(); return false; }
+    var s = document.createElement('style'); s.id = 'vyro-reader-style';
+    s.textContent = 'body{background:#faf8f2!important;color:#202124!important;max-width:760px!important;' +
+      'margin:40px auto!important;padding:0 24px!important;float:none!important;width:auto!important;' +
+      'font:19px/1.75 Georgia,serif!important}header,nav,footer,aside,form,iframe,.ad,#sidebar{display:none!important}' +
+      'img{max-width:100%!important;height:auto!important}a{color:#5b3fd6!important}';
+    document.head.appendChild(s);
+    return true;
+  };
+})();
+__VYRO_COMPANIONS__
+"#.to_string();
+    script = script.replace("__VYRO_DOMAINS__", &domains);
+    script = script.replace("__VYRO_FP__", if fp { "1" } else { "0" });
+    script = script.replace("__VYRO_COMPANIONS__", companions);
+    script
 }
 
 fn persist(state: &AppState) {
@@ -147,6 +308,13 @@ fn persist(state: &AppState) {
     if let Ok(v) = serde_json::to_string_pretty(h.list()) {
         let _ = fs::write(dir.join("history.json"), v);
     }
+    drop(h);
+    if let Ok(v) = state.vault.lock().unwrap().to_json() {
+        let _ = fs::write(dir.join("vault.json"), v);
+    }
+    if let Ok(v) = serde_json::to_string_pretty(state.companions.lock().unwrap().list()) {
+        let _ = fs::write(dir.join("companions.json"), v);
+    }
 }
 
 fn load_initial(state: &AppState) {
@@ -159,6 +327,24 @@ fn load_initial(state: &AppState) {
     if let Ok(s) = fs::read(dir.join("bookmarks.json")) {
         let mut b = state.bookmarks.lock().unwrap();
         let _ = b.import_json(&String::from_utf8_lossy(&s));
+    }
+    if let Ok(s) = fs::read(dir.join("history.json")) {
+        if let Ok(entries) = serde_json::from_slice::<Vec<vyro_core::history::HistoryEntry>>(&s) {
+            state.history.lock().unwrap().import(entries);
+        }
+    }
+    if let Ok(s) = fs::read(dir.join("vault.json")) {
+        if let Ok(v) = Vault::from_json(&String::from_utf8_lossy(&s)) {
+            *state.vault.lock().unwrap() = v;
+        }
+    }
+    if let Ok(s) = fs::read(dir.join("companions.json")) {
+        if let Ok(list) = serde_json::from_slice::<Vec<vyro_core::companions::Companion>>(&s) {
+            let mut m = state.companions.lock().unwrap();
+            for c in list {
+                let _ = m.install(c.id, c.name, c.matches, c.code);
+            }
+        }
     }
 }
 
@@ -190,7 +376,8 @@ fn emit_state(app: &tauri::AppHandle, state: &AppState) {
             "filters": blocker.filter_count(),
             "stats": blocker.stats_snapshot(),
             "allowlist": blocker.allowlisted_sites()
-        }
+        },
+        "network_gated": *state.network_gate.lock().unwrap()
     });
     let _ = app.emit("vyro://state", payload);
 }
@@ -214,7 +401,9 @@ async fn new_tab(
     let private = private.unwrap_or(false);
     let target = url.unwrap_or_default();
     let id = state.tabs.lock().unwrap().open(target.clone(), private);
-    let script = init_script(&state.blocker.lock().unwrap());
+    let fp = state.settings.lock().unwrap().fingerprinting_protection;
+    let companion_code = state.companions.lock().unwrap().script_for("*");
+    let script = init_script(&state.blocker.lock().unwrap(), fp, &companion_code);
 
     let window = app.get_window("main").ok_or("main window missing")?;
     let (w, h) = content_size(&window);
@@ -289,6 +478,19 @@ async fn navigate(
         vyro_core::engine::NavigationIntent::Search(u) => u,
     };
     let url = state.privacy.lock().unwrap().apply_policies(&raw);
+
+    // App-level kill switch: engages when the VPN drops and stays on until the
+    // user explicitly restores connectivity. It is NOT an OS firewall rule.
+    if *state.network_gate.lock().unwrap() {
+        return Ok(json!({ "blocked": true, "url": url, "reason": "Network gate active — VPN kill switch" }));
+    }
+
+    // Safe Browsing verdict: local denylist + optional real API lookup.
+    let verdict = state.safe_browsing.lock().unwrap().check(&url);
+    if let Verdict::Malicious(reason) = verdict {
+        emit_state(&app, &state);
+        return Ok(json!({ "blocked": true, "url": url, "reason": format!("Safe Browsing: {}", reason) }));
+    }
 
     let source = host_of(&url);
     let decision = state.blocker.lock().unwrap().check(
@@ -527,13 +729,25 @@ async fn vpn_add_provider(json_text: String, app: tauri::AppHandle, state: tauri
 #[tauri::command]
 async fn vpn_connect(provider: String, server: String, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     state.vpn.lock().unwrap().connect(&provider, &server).map_err(|e| e.to_string())?;
+    *state.network_gate.lock().unwrap() = false;
     emit_state(&app, &state);
     Ok(())
 }
 
 #[tauri::command]
 async fn vpn_disconnect(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let kill_switch = state.vpn.lock().unwrap().kill_switch;
     state.vpn.lock().unwrap().disconnect().map_err(|e| e.to_string())?;
+    if kill_switch {
+        *state.network_gate.lock().unwrap() = true;
+    }
+    emit_state(&app, &state);
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_network_gate(enabled: bool, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    *state.network_gate.lock().unwrap() = enabled;
     emit_state(&app, &state);
     Ok(())
 }
@@ -615,6 +829,151 @@ async fn engine_engines() -> Result<Value, String> {
     ]))
 }
 
+// ---------------------------------------------------------------------------
+// Protection, vault, companions, reader/find, groups
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn safe_browsing_state(state: tauri::State<'_, AppState>) -> Result<Value, String> {
+    let sb = state.safe_browsing.lock().unwrap();
+    Ok(json!({
+        "enabled": sb.config.enabled,
+        "remote_available": sb.remote_available(),
+        "api_key_env": sb.config.api_key_env,
+        "domains": sb.local_domains()
+    }))
+}
+
+#[tauri::command]
+async fn safe_browsing_toggle(enabled: bool, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.safe_browsing.lock().unwrap().set_enabled(enabled);
+    Ok(())
+}
+
+#[tauri::command]
+async fn safe_browsing_add_domain(domain: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.safe_browsing.lock().unwrap().add_local_domain(&domain);
+    persist(&state);
+    Ok(())
+}
+
+#[tauri::command]
+async fn find_in_page(id: u64, query: String, step: Option<i32>, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let js = if let Some(direction) = step {
+        format!("window.__vyroFindStep({});", direction)
+    } else {
+        format!("window.__vyroFind({});", serde_json::to_string(&query).unwrap_or_else(|_| "\"\"".into()))
+    };
+    if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
+        wv.eval(&js).map_err(|e| e.to_string())?;
+    }
+    emit_state(&app, &state);
+    Ok(())
+}
+
+#[tauri::command]
+async fn reader_mode(id: u64, state: tauri::State<'_, AppState>) -> Result<bool, String> {
+    let code = r#"(function(){ return !!window.__vyroReader && window.__vyroReader(); })()"#;
+    if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
+        // eval cannot return a value; the toggle also works by calling it again.
+        wv.eval(code).map_err(|e| e.to_string())?;
+    }
+    Ok(true)
+}
+
+#[tauri::command]
+async fn tab_set_group(id: u64, group: Option<String>, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<Vec<TabView>, String> {
+    state.tabs.lock().unwrap().set_group(id, group);
+    emit_state(&app, &state);
+    Ok(tab_views(&state))
+}
+
+#[tauri::command]
+async fn vault_state(state: tauri::State<'_, AppState>) -> Result<Value, String> {
+    let v = state.vault.lock().unwrap();
+    Ok(json!({
+        "initialized": v.is_initialized(),
+        "unlocked": v.is_unlocked(),
+        "count": v.count()
+    }))
+}
+
+#[tauri::command]
+async fn vault_init(master: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.vault.lock().unwrap().initialize(&master).map_err(|e| e.to_string())?;
+    persist(&state);
+    Ok(())
+}
+
+#[tauri::command]
+async fn vault_unlock(master: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.vault.lock().unwrap().unlock(&master).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn vault_lock(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.vault.lock().unwrap().lock();
+    Ok(())
+}
+
+#[tauri::command]
+async fn vault_add(service: String, username: String, password: String, state: tauri::State<'_, AppState>) -> Result<u64, String> {
+    let id = state.vault.lock().unwrap().add(&service, &username, &password).map_err(|e| e.to_string())?;
+    persist(&state);
+    Ok(id)
+}
+
+#[tauri::command]
+async fn vault_list(state: tauri::State<'_, AppState>) -> Result<Vec<(u64, String, String)>, String> {
+    Ok(state.vault.lock().unwrap().list())
+}
+
+#[tauri::command]
+async fn vault_reveal(id: u64, state: tauri::State<'_, AppState>) -> Result<String, String> {
+    state.vault.lock().unwrap().reveal(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn vault_remove(id: u64, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.vault.lock().unwrap().remove(id).map_err(|e| e.to_string())?;
+    persist(&state);
+    Ok(())
+}
+
+#[tauri::command]
+async fn companion_list(state: tauri::State<'_, AppState>) -> Result<Value, String> {
+    Ok(json!({
+        "items": state.companions.lock().unwrap().list(),
+        "note": "VYRO companion format — first-party JS injected into matching pages. Not Chrome Web Store extensions."
+    }))
+}
+
+#[tauri::command]
+async fn companion_install(id: String, name: String, matches: Vec<String>, code: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.companions.lock().unwrap().install(id, name, matches, code)?;
+    persist(&state);
+    Ok(())
+}
+
+#[tauri::command]
+async fn companion_remove(id: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    if !state.companions.lock().unwrap().remove(&id) {
+        return Err(format!("Companion '{}' not found", id));
+    }
+    persist(&state);
+    Ok(())
+}
+
+#[tauri::command]
+async fn companion_toggle(id: String, enabled: bool, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    if !state.companions.lock().unwrap().toggle(&id, enabled) {
+        return Err(format!("Companion '{}' not found", id));
+    }
+    persist(&state);
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState {
@@ -679,7 +1038,26 @@ pub fn run() {
             settings_get,
             settings_patch,
             settings_update,
-            engine_engines
+            engine_engines,
+            set_network_gate,
+            safe_browsing_state,
+            safe_browsing_toggle,
+            safe_browsing_add_domain,
+            find_in_page,
+            reader_mode,
+            tab_set_group,
+            vault_state,
+            vault_init,
+            vault_unlock,
+            vault_lock,
+            vault_add,
+            vault_list,
+            vault_reveal,
+            vault_remove,
+            companion_list,
+            companion_install,
+            companion_remove,
+            companion_toggle
         ])
         .run(tauri::generate_context!())
         .expect("VYRO Browser failed to start");

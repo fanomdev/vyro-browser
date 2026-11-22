@@ -8,7 +8,7 @@ The pure-Rust core is compiled and tested independently of the webview shell:
 cargo test --manifest-path vyro-core/Cargo.toml
 ```
 
-Result on rustc 1.100.0 (windows-gnu): **44 passed, 0 failed**.
+Result on rustc 1.100.0 (windows-gnu): **51 passed, 0 failed**.
 
 Coverage by module:
 
@@ -22,6 +22,9 @@ Coverage by module:
 | `engine` | 5 | bare domain → https, query → search URL, explicit scheme preserved, HTTPS upgrade, numeric input treated as search |
 | `vpn` | 5 | refuses to simulate without provider, refuses missing command, server/country selection, real connect via configured command, diagnostics flag gaps |
 | `extensions` | 3 | manifest parsing, install/toggle/remove lifecycle, honest support report |
+| `safe_browsing` | 3 | local denylist verdicts, disabled state, no fake verdict without an API key |
+| `vault` | 2 | Argon2 + AES-256-GCM roundtrip, wrong-password rejection, lock enforcement |
+| `companions` | 2 | install/toggle/remove, match globs, per-companion error isolation |
 | `privacy` | 3 | permission decision lifecycle, reset origin, HTTPS + cookie policy |
 | `settings` | 2 | privacy-first defaults, serde roundtrip |
 | `storage` | 2 | atomic JSON roundtrip, missing file |

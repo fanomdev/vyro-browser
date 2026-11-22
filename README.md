@@ -29,14 +29,15 @@ extension integration layers are implemented in Rust and covered by 43+ unit tes
 | Downloads manager (state) | ⚠️ Partial | Lifecycle/progress state in Rust; byte transfer not yet wired |
 | Privacy dashboard | ✅ Yes | Protection stats, controls, permissions |
 | Cookie policy, HTTPS upgrades, permissions | ✅ Yes | Core logic implemented and tested |
-| Fingerprinting protection | ⚠️ Flag only | No actual mitigations yet — do not rely on it |
-| Safe Browsing | ⚠️ Flag only | No Safe Browsing API service integration yet |
+| Fingerprinting protection | ✅ In-page mitigations | Canvas/audio/WebGL/screen/navigator entropy reduction via injected script; not a security boundary |
+| Safe Browsing | ✅ Local + real API | Bundled threat denylist plus Google Safe Browsing API v5 lookups when `VYRO_SAFE_BROWSING_KEY` is set |
 | VPN integration | ✅ Layer / ⚠️ provider needed | Real connect/disconnect via configured provider CLI; **no simulated connections**, no bundled credentials |
-| Kill switch / DNS leak protection | ⚠️ Settings only | Requires OS firewall/DNS work by provider backend |
-| Extension management | ⚠️ Inventory only | Manifest parsing, enable/disable; **Chrome Web Store APIs are not supported by webview engines** |
+| Kill switch | ✅ App-level | Browsing is gated when the VPN drops; **not** an OS firewall rule |
+| DNS leak protection | ⚠️ Settings only | Requires provider-level DNS enforcement |
+| Extension management | ⚠️ Inventory + companions | Manifest parsing/enable-disable plus VYRO companion scripts; **Chrome Web Store APIs are not supported by webview engines** |
 | Dark/light themes, accent, customization | ✅ Yes | Applied live from settings |
-| Password manager | ❌ Not implemented | — |
-| Reader mode, find-on-page, tab groups UI | ❌ Not implemented | Core tab-group state exists |
+| Password manager | ✅ Encrypted vault | Argon2 + AES-256-GCM; master password never stored, only ciphertext |
+| Reader mode, find-on-page, tab groups UI | ✅ Implemented | Injected reader/find scripts; right-click a tab to group it |
 | Session restore on startup | ⚠️ Partial | Snapshot API exists; auto-restore not wired |
 | Android / iOS / Linux builds | ⚠️ Not produced here | Architecture supports Tauri mobile; requires macOS/Android SDK and platform testing |
 
