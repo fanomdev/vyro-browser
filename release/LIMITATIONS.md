@@ -50,6 +50,25 @@ What is not:
 - No private provider, credentials, or API keys are bundled. The bundled US `.ovpn` is
   a public sample and may be stale; the live feed is preferred.
 
+### Providers evaluated and why they are not bundled
+
+- **VPN Gate** (public feed): real OpenVPN configs, but tested servers returned
+  `AUTH_FAILED` or never answered the auth stage — no tunnel was established.
+- **RapidAPI `free-vpn` MCP**: its only tool returned "API is unreachable / API
+  (not working)".
+- **apis.io `vpn-server` schema**: a JSON Schema (data shape), not a service.
+- **api-evangelist/vpn**: a documentation profile of NordVPN's public API, not a
+  tunnel service.
+- **Azure VPN Gateway API**: ARM management API requiring an Azure subscription and
+  deployed gateway — infrastructure, not a consumer VPN.
+- **linkartemy/outline-vpn-api**: a C++ server/key-management library, not a client.
+- **VPNly**: proprietary app/extension service with no published API, `.ovpn` or
+  WireGuard config. Integrating it would require reverse-engineering a private
+  protocol, which VYRO does not do.
+
+A usable provider must issue standard `.ovpn` or WireGuard config files, or expose a
+documented client API. With those, VYRO's existing provider layer can connect for real.
+
 ## 4. Privacy / security features and their limits
 
 - **Fingerprinting protection** now applies real in-page mitigations (navigator,
