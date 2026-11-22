@@ -43,7 +43,12 @@ What is not:
   not stop other applications from reaching the network.
 - **DNS leak protection** remains a settings flag; enforcing it requires provider-level
   DNS routing — not implemented.
-- No provider is bundled; no private keys or API keys are shipped.
+- **VPN Gate** is integrated against the public Vpngate-Scraper-API feed; servers are
+  third-party and may be unreliable or restricted by their operators. Creating the
+  TUN adapter and routes needs administrator rights on Windows — if OpenVPN exits
+  immediately, VYRO reports that instead of claiming a connection. ToS apply per server.
+- No private provider, credentials, or API keys are bundled. The bundled US `.ovpn` is
+  a public sample and may be stale; the live feed is preferred.
 
 ## 4. Privacy / security features and their limits
 

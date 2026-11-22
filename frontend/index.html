@@ -19,6 +19,7 @@
       </svg>
       <span class="brand-name">VYRO</span>
     </div>
+    <span id="tab-count" class="tab-count" title="Open tabs">0</span>
     <button id="new-tab" class="add-tab" title="New tab (Ctrl+T)" aria-label="New tab">
       <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
     </button>
@@ -183,7 +184,14 @@
         <label class="row"><span>DNS leak protection</span><input type="checkbox" id="vpn-dns" class="switch"></label>
         <label class="row"><span>Auto-reconnect</span><input type="checkbox" id="vpn-auto" class="switch"></label>
       </div>
-      <div class="notice" id="vpn-guide"><b>No VPN provider is bundled.</b> VYRO will not simulate a tunnel. Add a provider below with a real command (for example <code>wg-quick up /path/to/vyro.conf</code>), then select a server and connect. Until then, Connect refuses by design.</div>
+      <div class="notice" id="vpn-guide"><b>No private VPN provider is bundled.</b> Use VPN Gate below for real public OpenVPN servers, or add your own provider with a real tunnel command. VYRO never simulates a connection.</div>
+      <div class="card"><h2>VPN Gate servers</h2>
+        <p class="muted">Public servers from the Vpngate-Scraper-API. Respect each operator's terms of use. Creating the adapter usually requires administrator rights.</p>
+        <div class="row"><input id="vg-openvpn" placeholder="OpenVPN path (openvpn.exe)" /><button class="btn" id="vg-refresh">Refresh servers</button></div>
+        <div class="row"><select id="vg-country"></select><select id="vg-server"></select><button class="btn primary" id="vg-connect">Connect</button></div>
+        <button class="btn" id="vg-bundled">Connect bundled US sample</button>
+        <div id="vg-list" class="list"></div>
+      </div>
       <div class="card"><h2>Diagnostics</h2><div id="vpn-diag" class="list"></div></div>
       <div class="card"><h2>Add a provider</h2>
         <textarea id="vpn-provider-json" rows="6" placeholder='{"id":"wg1","name":"My WG","protocol":"wireguard","servers":[{"id":"tokyo","country":"JP","city":"Tokyo"}],"connect_command":"wg-quick up /path/vyro.conf","disconnect_command":"wg-quick down /path/vyro.conf","credential_env":"VYRO_WG_KEY"}'></textarea>

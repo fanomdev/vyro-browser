@@ -52,7 +52,9 @@ extension integration layers are implemented in Rust and covered by 43+ unit tes
 - **Encrypted password vault** — Argon2 + AES-256-GCM; the master password is never stored.
 - **Reader mode and find-on-page** — toolbar buttons plus `Ctrl+F`, with match navigation.
 - **Tab groups** via right-click on a tab.
-- **VPN integration** — real connect/disconnect through a configured provider CLI, server/country selection, diagnostics, and an app-level kill switch. No provider is bundled and no connection is simulated.
+- **VPN Gate provider** — fetches the live public-server feed, decodes `.ovpn` configs, and launches a real OpenVPN process with country/server selection plus a bundled US sample fallback.
+- **VPN integration** — connect/disconnect through a configured provider CLI, diagnostics, and an app-level kill switch. No private provider is bundled and no connection is simulated.
+- **Tab strip** — horizontal wheel and drag scrolling, a live tab counter, and enter/exit animations when tabs are added or removed.
 - **Companion extensions** — first-party scripts injected into matching pages, with an honest note that Chrome Web Store APIs are unavailable on webview engines.
 - **Swiss/minimal dark UI** — flat surfaces, no decorative glows, visible focus rings, reduced-motion support, and a light theme.
 

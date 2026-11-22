@@ -24,7 +24,8 @@ use vyro_core::privacy::{Decision, Permission, PrivacyController};
 use vyro_core::settings::Settings;
 use vyro_core::tabs::TabManager;
 use vyro_core::vault::Vault;
-use vyro_core::vpn::{VpnManager, VpnProviderConfig};
+use vyro_core::vpn::{VpnManager, VpnProviderConfig, VpnServer, VpnStatus};
+use vyro_core::vpn_gate::{self as vpngate, VpnGateServer};
 use vyro_core::APP_NAME;
 
 /// Height of the browser chrome (tab strip + toolbar) in logical pixels.
@@ -49,6 +50,7 @@ pub struct AppState {
     companions: Mutex<CompanionManager>,
     /// App-level kill switch: blocks navigation when the VPN drops.
     network_gate: Mutex<bool>,
+    vpn_gate_servers: Mutex<Vec<VpnGateServer>>,
 }
 
 #[derive(Serialize)]
@@ -831,6 +833,139 @@ async fn engine_engines() -> Result<Value, String> {
 }
 
 // ---------------------------------------------------------------------------
+// VPN Gate provider (real OpenVPN process, no simulation)
+// ---------------------------------------------------------------------------
+
+fn pid_alive(pid: u32) -> bool {
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {}", pid), "/NH"])
+            .output();
+        match output {
+            Ok(o) => String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()),
+            Err(_) => false,
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+}
+
+fn connect_openvpn(
+    state: &AppState,
+    id: &str,
+    name: &str,
+    config: &str,
+    openvpn_path: &str,
+    server: VpnServer,
+) -> Result<(), String> {
+    if openvpn_path.contains(['/', '\\']) && !std::path::Path::new(openvpn_path).exists() {
+        return Err(format!("OpenVPN executable not found at {}", openvpn_path));
+    }
+    let dir = state.data_dir.lock().unwrap().clone();
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let config_path = dir.join(format!("{}.ovpn", id.replace(['/', '\\'], "_")));
+    fs::write(&config_path, config).map_err(|e| e.to_string())?;
+
+    let provider = VpnProviderConfig {
+        id: id.to_string(),
+        name: name.to_string(),
+        protocol: "openvpn".into(),
+        servers: vec![server.clone()],
+        background: true,
+        connect_program: Some(openvpn_path.to_string()),
+        connect_args: vec!["--config".into(), config_path.to_string_lossy().into_owned()],
+        ..Default::default()
+    };
+    let mut vpn = state.vpn.lock().unwrap();
+    vpn.providers.retain(|p| p.id != id);
+    vpn.add_provider(provider);
+    vpn.connect(id, &server.id).map_err(|e| e.to_string())?;
+    if let VpnStatus::Connected(session) = &vpn.status {
+        if let Some(pid) = session.pid {
+            if !pid_alive(pid) {
+                let _ = vpn.disconnect();
+                return Err(
+                    "OpenVPN exited immediately. Creating the network adapter usually requires administrator rights."
+                        .into(),
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn vpn_gate_servers(state: tauri::State<'_, AppState>) -> Result<Value, String> {
+    let mut cache = state.vpn_gate_servers.lock().unwrap();
+    if cache.is_empty() {
+        *cache = vpngate::fetch_servers()?;
+    }
+    // config_b64 is skipped by serde, so the UI payload stays small.
+    let snapshot = cache.clone();
+    Ok(json!(snapshot))
+}
+
+#[tauri::command]
+async fn vpn_gate_connect(
+    index: usize,
+    openvpn_path: Option<String>,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let server = {
+        let cache = state.vpn_gate_servers.lock().unwrap();
+        cache.get(index).cloned().ok_or("Server list not loaded — refresh it first")?
+    };
+    let config = server.config()?;
+    let exe = openvpn_path.unwrap_or_else(|| "openvpn".into());
+    connect_openvpn(
+        &state,
+        "vpngate",
+        &format!("VPN Gate · {}", server.hostname),
+        &config,
+        &exe,
+        VpnServer {
+            id: index.to_string(),
+            country: server.country_code,
+            city: server.hostname,
+        },
+    )?;
+    emit_state(&app, &state);
+    Ok(())
+}
+
+#[tauri::command]
+async fn vpn_gate_bundled_connect(
+    openvpn_path: Option<String>,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let config = include_str!("../assets/server_10_US.ovpn");
+    let exe = openvpn_path.unwrap_or_else(|| "openvpn".into());
+    connect_openvpn(
+        &state,
+        "vpngate-bundled",
+        "VPN Gate · bundled US server",
+        config,
+        &exe,
+        VpnServer {
+            id: "bundled-us".into(),
+            country: "US".into(),
+            city: "Bundled sample".into(),
+        },
+    )?;
+    emit_state(&app, &state);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Protection, vault, companions, reader/find, groups
 // ---------------------------------------------------------------------------
 
@@ -1031,6 +1166,9 @@ pub fn run() {
             vpn_add_provider,
             vpn_connect,
             vpn_disconnect,
+            vpn_gate_servers,
+            vpn_gate_connect,
+            vpn_gate_bundled_connect,
             extensions_list,
             extensions_install,
             extensions_toggle,

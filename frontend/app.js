@@ -8,7 +8,7 @@ const $$ = (s) => Array.from(document.querySelectorAll(s));
 
 const S = {
   tabs: [], activeId: null, settings: null,
-  blocker: null, vpn: null, extensions: null,
+  blocker: null, vpn: null, extensions: null, vpnGate: [],
 };
 
 /* --------------------------- boot --------------------------- */
@@ -64,19 +64,67 @@ async function refreshLight() {
 /* --------------------------- tabs & nav --------------------------- */
 const activeTab = () => S.tabs.find(t => t.id === S.activeId);
 
+let renderedTabIds = new Set();
 function renderTabs() {
   const strip = $('#tabstrip');
+  const incoming = new Set(S.tabs.map(t => t.id));
+  const ghosts = [...renderedTabIds].filter(id => !incoming.has(id)).map(id => {
+    const el = strip.querySelector(`[data-tab-id="${id}"]`);
+    return el ? el.cloneNode(true) : null;
+  }).filter(Boolean);
+
   strip.innerHTML = '';
   for (const t of S.tabs) {
     const el = document.createElement('div');
+    el.dataset.tabId = t.id;
     el.className = 'tab' + (t.active ? ' active' : '') + (t.private ? ' private' : '');
+    if (!renderedTabIds.has(t.id)) el.classList.add('tab-enter');
     el.innerHTML = `<span class="fav"></span><span class="label"></span><span class="tab-close" title="Close tab"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>`;
     el.querySelector('.label').textContent = (t.group ? t.group + ' · ' : '') + (t.title || t.url || 'New Tab');
-    el.onclick = (e) => { if (e.target.closest('.tab-close')) return; activateTab(t.id); };
+    el.onclick = (e) => { if (dragMoved || e.target.closest('.tab-close')) return; activateTab(t.id); };
     el.querySelector('.tab-close').onclick = (e) => { e.stopPropagation(); closeTab(t.id); };
     el.oncontextmenu = (e) => { e.preventDefault(); showTabMenu(e.clientX, e.clientY, t.id, t.group); };
     strip.appendChild(el);
   }
+  ghosts.forEach(g => {
+    g.classList.add('tab-exit'); g.removeAttribute('data-tab-id');
+    strip.appendChild(g);
+    setTimeout(() => g.remove(), 190);
+  });
+  renderedTabIds = incoming;
+  $('#tab-count').textContent = S.tabs.length;
+  const active = strip.querySelector('.tab.active');
+  if (active) {
+    const sr = strip.getBoundingClientRect(), ar = active.getBoundingClientRect();
+    if (ar.right > sr.right) strip.scrollLeft += ar.right - sr.right;
+    else if (ar.left < sr.left) strip.scrollLeft -= sr.left - ar.left;
+  }
+}
+
+let dragMoved = false;
+function bindTabStripScrolling() {
+  const strip = $('#tabstrip');
+  strip.addEventListener('wheel', (e) => {
+    if (strip.scrollWidth <= strip.clientWidth) return;
+    e.preventDefault();
+    strip.scrollLeft += Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+  }, { passive: false });
+  let startX = 0, startScroll = 0, dragging = false;
+  strip.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.tab-close')) return;
+    dragging = true; dragMoved = false;
+    startX = e.clientX; startScroll = strip.scrollLeft;
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    if (Math.abs(dx) > 4) { dragMoved = true; strip.classList.add('dragging'); }
+    if (dragMoved) strip.scrollLeft = startScroll - dx;
+  });
+  window.addEventListener('pointerup', () => {
+    dragging = false; strip.classList.remove('dragging');
+    setTimeout(() => { dragMoved = false; }, 0);
+  });
 }
 function renderAddress() {
   const t = activeTab();
@@ -133,7 +181,7 @@ async function openPanel(name) {
   try { await invoke('set_content_visible', { visible: false }); } catch (_) {}
   if (name === 'privacy') await renderPrivacy();
   if (name === 'blocker') await refreshBlocker(true);
-  if (name === 'vpn') await renderVpn();
+  if (name === 'vpn') { await renderVpn(); await renderVpnGate(); }
   if (name === 'extensions') await renderExtensions();
   if (name === 'history') await renderHistory();
   if (name === 'bookmarks') await renderBookmarks();
@@ -219,6 +267,24 @@ function vpnLabel(s) {
   if (s.Reconnecting) return 'Reconnecting…';
   if (s.Error) return 'Error: ' + s.Error;
   return 'Disconnected';
+}
+async function renderVpnGate(refresh = false) {
+  try {
+    if (refresh || !S.vpnGate.length) S.vpnGate = await invoke('vpn_gate_servers');
+    const countries = [...new Set(S.vpnGate.map(s => s.country_code))].sort();
+    const csel = $('#vg-country');
+    const prevCountry = csel.value;
+    csel.innerHTML = countries.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    if (prevCountry && countries.includes(prevCountry)) csel.value = prevCountry;
+    const fill = () => {
+      const list = S.vpnGate.filter(s => !csel.value || s.country_code === csel.value);
+      $('#vg-server').innerHTML = list.map(s =>
+        `<option value="${s.index}">${esc(s.hostname)} · ${esc(s.ip)} · ${esc(s.ping)}ms</option>`).join('');
+      $('#vg-list').innerHTML = list.slice(0, 12).map(s =>
+        `<div class="list-item"><span class="grow"><b>${esc(s.hostname)}</b> <span class="sub">${esc(s.country_code)}</span><br><span class="sub">${esc(s.ip)} · ${esc(s.ping)} ms · ${esc(s.speed)}</span></span></div>`).join('');
+    };
+    csel.onchange = fill; fill();
+  } catch (e) { toast('VPN Gate: ' + e); }
 }
 async function renderVpn() {
   try { S.vpn = await invoke('vpn_state'); } catch (e) { return toast(e); }
@@ -441,6 +507,19 @@ function bindUI() {
   $('#vpn-kill').onchange = e => patch('vpn_kill_switch', e.target.checked);
   $('#vpn-dns').onchange = e => patch('vpn_dns_leak_protection', e.target.checked);
   $('#vpn-auto').onchange = e => patch('vpn_auto_reconnect', e.target.checked);
+  $('#vg-refresh').onclick = () => renderVpnGate(true);
+  $('#vg-connect').onclick = async () => {
+    try {
+      await invoke('vpn_gate_connect', { index: Number($('#vg-server').value), openvpnPath: $('#vg-openvpn').value || null });
+      toast('VPN Gate connected'); renderVpn();
+    } catch (e) { toast(String(e)); }
+  };
+  $('#vg-bundled').onclick = async () => {
+    try {
+      await invoke('vpn_gate_bundled_connect', { openvpnPath: $('#vg-openvpn').value || null });
+      toast('Bundled sample connected'); renderVpn();
+    } catch (e) { toast(String(e)); }
+  };
   $('#vpn-add-provider').onclick = async () => {
     try { await invoke('vpn_add_provider', { jsonText: $('#vpn-provider-json').value }); toast('Provider added'); renderVpn(); }
     catch (e) { toast('Invalid provider JSON: ' + e); }

@@ -26,6 +26,7 @@ pub mod storage;
 pub mod tabs;
 pub mod vault;
 pub mod vpn;
+pub mod vpn_gate;
 
 /// VYRO product constants — single source of truth for branding.
 pub const APP_NAME: &str = "VYRO";

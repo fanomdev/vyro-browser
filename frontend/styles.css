@@ -59,7 +59,13 @@ button { cursor: pointer; }
 .brand-mark .grad { fill: var(--accent); }
 .brand-mark .spark { fill: var(--text); }
 .brand-name { font-weight: 700; letter-spacing: 0.18em; font-size: 11px; }
-.tabstrip { flex: 1; display: flex; align-items: flex-end; gap: 4px; height: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding-top: 5px; }
+.tab-count { font-size: 10px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.tabstrip { flex: 1; display: flex; align-items: flex-end; gap: 4px; height: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding-top: 5px; cursor: grab; }
+.tabstrip.dragging { cursor: grabbing; }
+.tab-enter { animation: tabIn 180ms cubic-bezier(.2,.8,.2,1) both; transform-origin: left center; }
+.tab-exit { animation: tabOut 170ms ease-in both; pointer-events: none; transform-origin: left center; }
+@keyframes tabIn { from { opacity: 0; transform: translateY(6px) scaleX(.7); } to { opacity: 1; transform: none; } }
+@keyframes tabOut { to { opacity: 0; transform: translateY(-6px) scaleX(.6); } }
 .tabstrip::-webkit-scrollbar { display: none; }
 .tab {
   position: relative; display: flex; align-items: center; gap: 8px;

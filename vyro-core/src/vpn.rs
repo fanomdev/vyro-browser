@@ -31,6 +31,32 @@ pub struct VpnProviderConfig {
     pub disconnect_command: Option<String>,
     /// Name of the environment variable holding the provider credential.
     pub credential_env: Option<String>,
+    /// Launch a long-lived process (e.g. OpenVPN) without waiting for exit.
+    #[serde(default)]
+    pub background: bool,
+    /// Direct executable path, used instead of `connect_command` in background mode.
+    #[serde(default)]
+    pub connect_program: Option<String>,
+    /// Arguments passed to `connect_program` (no shell involved).
+    #[serde(default)]
+    pub connect_args: Vec<String>,
+}
+
+impl Default for VpnProviderConfig {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            protocol: String::new(),
+            servers: Vec::new(),
+            connect_command: None,
+            disconnect_command: None,
+            credential_env: None,
+            background: false,
+            connect_program: None,
+            connect_args: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,6 +64,8 @@ pub struct VpnSession {
     pub provider_id: String,
     pub server_id: String,
     pub connected_at: u64,
+    #[serde(default)]
+    pub pid: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -208,10 +236,6 @@ impl VpnManager {
         if !provider.servers.is_empty() && !provider.servers.iter().any(|s| s.id == server_id) {
             return Err(VpnError::ServerNotFound(server_id.to_string()));
         }
-        let connect_cmd = provider
-            .connect_command
-            .clone()
-            .ok_or_else(|| VpnError::MissingConnectCommand(provider.id.clone()))?;
         let secret = self.secret_for(&provider)?;
         let country = provider
             .servers
@@ -221,13 +245,37 @@ impl VpnManager {
             .unwrap_or_default();
 
         self.status = VpnStatus::Connecting;
-        match run_command(&connect_cmd, server_id, &country, secret.as_deref()) {
-            Ok(_) => {
+        // Long-lived providers (OpenVPN) are spawned, never waited on — the
+        // command would otherwise block until the tunnel is torn down.
+        let launched = if provider.background {
+            let program = provider
+                .connect_program
+                .clone()
+                .ok_or_else(|| VpnError::MissingConnectCommand(provider.id.clone()))?;
+            let mut cmd = Command::new(program);
+            cmd.args(&provider.connect_args);
+            if let Some(s) = secret.as_deref() {
+                cmd.env("VYRO_VPN_SECRET", s);
+            }
+            cmd.spawn()
+                .map(|child| Some(child.id()))
+                .map_err(|e| VpnError::CommandFailed(e.to_string()))
+        } else {
+            let connect_cmd = provider
+                .connect_command
+                .clone()
+                .ok_or_else(|| VpnError::MissingConnectCommand(provider.id.clone()))?;
+            run_command(&connect_cmd, server_id, &country, secret.as_deref()).map(|_| None)
+        };
+
+        match launched {
+            Ok(pid) => {
                 self.selected_server = Some(server_id.to_string());
                 self.status = VpnStatus::Connected(VpnSession {
                     provider_id: provider.id.clone(),
                     server_id: server_id.to_string(),
                     connected_at: now(),
+                    pid,
                 });
                 Ok(())
             }
@@ -247,6 +295,15 @@ impl VpnManager {
             .provider(&session.provider_id)
             .ok_or_else(|| VpnError::ProviderNotFound(session.provider_id.clone()))?
             .clone();
+        if let Some(pid) = session.pid {
+            #[cfg(windows)]
+            let kill = Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .output();
+            #[cfg(not(windows))]
+            let kill = Command::new("kill").args(["-TERM", &pid.to_string()]).output();
+            let _ = kill;
+        }
         if let Some(cmd) = &provider.disconnect_command {
             let secret = self.secret_for(&provider)?;
             run_command(cmd, &session.server_id, "", secret.as_deref())?;
@@ -347,6 +404,7 @@ mod tests {
             connect_command: None,
             disconnect_command: None,
             credential_env: None,
+            ..Default::default()
         });
         assert_eq!(m.connect("p", "s1"), Err(VpnError::MissingConnectCommand("p".into())));
     }
@@ -361,6 +419,7 @@ mod tests {
                 VpnServer { id: "b".into(), country: "DE".into(), city: "Berlin".into() },
             ],
             connect_command: None, disconnect_command: None, credential_env: None,
+            ..Default::default()
         });
         assert_eq!(m.countries(), vec!["DE", "JP"]);
         assert_eq!(m.servers_for("p").len(), 2);
@@ -377,11 +436,37 @@ mod tests {
             connect_command: Some(cmd.into()),
             disconnect_command: Some(cmd.into()),
             credential_env: None,
+            ..Default::default()
         });
         assert!(m.connect("p", "a").is_ok());
         assert!(matches!(m.status, VpnStatus::Connected(_)));
         assert!(m.disconnect().is_ok());
         assert_eq!(m.status, VpnStatus::Disconnected);
+    }
+
+    #[test]
+    fn background_provider_spawns_and_kills_process() {
+        let mut m = VpnManager::default();
+        m.add_provider(VpnProviderConfig {
+            id: "bg".into(),
+            name: "Background".into(),
+            protocol: "test".into(),
+            servers: vec![VpnServer { id: "s".into(), country: "US".into(), city: "Test".into() }],
+            background: true,
+            connect_program: Some(if cfg!(windows) { "ping".into() } else { "sleep".into() }),
+            connect_args: if cfg!(windows) {
+                vec!["-n".into(), "20".into(), "127.0.0.1".into()]
+            } else {
+                vec!["20".into()]
+            },
+            ..Default::default()
+        });
+        m.connect("bg", "s").unwrap();
+        match &m.status {
+            VpnStatus::Connected(s) => assert!(s.pid.is_some()),
+            _ => panic!("expected connected"),
+        }
+        assert!(m.disconnect().is_ok());
     }
 
     #[test]
