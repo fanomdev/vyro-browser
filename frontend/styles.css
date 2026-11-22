@@ -220,6 +220,11 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: v
 .side-foot { position: absolute; bottom: 18px; left: 20px; color: var(--faint); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
 
 /* ---------------- Status, overlays ---------------- */
+.dl-trigger { position: relative; }
+.download-badge { position: absolute; top: 1px; right: 0; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--accent); color: #fff; font-size: 9px; font-weight: 700; line-height: 14px; text-align: center; }
+.download-badge.pulse { animation: dlpulse 700ms ease-out 2; }
+@keyframes dlpulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(124,92,255,.6); } 50% { transform: scale(1.3); } 100% { transform: scale(1); box-shadow: 0 0 0 10px rgba(124,92,255,0); } }
+
 .download-popover {
   position: fixed; top: 100px; right: 16px; width: 360px; max-height: 420px; z-index: 120;
   background: var(--chrome-2); border: 1px solid var(--line); border-radius: var(--radius);

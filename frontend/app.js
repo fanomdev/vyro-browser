@@ -53,6 +53,21 @@ function listenForState() {
     await invoke('plugin:event|listen', { event: 'vyro://state', target: { kind: 'Any' }, handler });
     const settingsHandler = T.transformCallback(() => openPanel('settings'));
     await invoke('plugin:event|listen', { event: 'vyro://open-download-settings', target: { kind: 'Any' }, handler: settingsHandler }).catch(() => {});
+    const dlHandler = T.transformCallback(async (payload) => {
+      const data = payload?.payload ?? payload;
+      if (!data?.started) return;
+      toast('Downloading ' + (data.filename || 'file'));
+      const badge = $('#download-badge');
+      try {
+        const list = await invoke('downloads_list');
+        const active = (list.items || []).filter(d => d.state === 'InProgress' || d.state === 'Pending').length;
+        badge.textContent = active || '•';
+      } catch (_) { badge.textContent = '•'; }
+      badge.classList.remove('hidden', 'pulse');
+      void badge.offsetWidth;
+      badge.classList.add('pulse');
+    });
+    await invoke('plugin:event|listen', { event: 'vyro://downloads', target: { kind: 'Any' }, handler: dlHandler }).catch(() => {});
   };
   listen().catch(() => setInterval(refreshLight, 1500));
 }

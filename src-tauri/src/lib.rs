@@ -449,12 +449,15 @@ async fn new_tab(
                             let mut downloads = state.downloads.lock().unwrap();
                             let id = downloads.enqueue(
                                 url.to_string(),
-                                filename,
+                                filename.clone(),
                                 target.to_string_lossy().into_owned(),
                             );
                             downloads.start(id);
                             drop(downloads);
-                            let _ = handle.emit("vyro://downloads", json!({ "id": id }));
+                            let _ = handle.emit(
+                                "vyro://downloads",
+                                json!({ "id": id, "filename": filename, "started": true }),
+                            );
 
                             // WebView2 reports start/finish only; watch the file size
                             // so the popover can show real progress.
@@ -750,21 +753,37 @@ async fn downloads_set_dir(path: String, app: tauri::AppHandle, state: tauri::St
 
 #[tauri::command]
 async fn download_show_in_folder(path: String) -> Result<(), String> {
+    let original = PathBuf::from(&path);
+    // Downloads still in progress may not have created the final file yet —
+    // fall back to the containing folder so the button always does something.
+    let target = if original.exists() {
+        original.clone()
+    } else {
+        original
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| original.clone())
+    };
+    if !target.exists() {
+        return Err(format!("Folder no longer exists: {}", target.display()));
+    }
     #[cfg(windows)]
     {
-        ProcCommand::new("explorer")
-            .arg(format!("/select,{}", path))
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let windir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
+        let explorer = PathBuf::from(windir).join("explorer.exe");
+        let select_arg = format!("/select,\"{}\"", target.to_string_lossy());
+        if ProcCommand::new(&explorer).arg(&select_arg).spawn().is_err() {
+            // Selecting can fail on some Explorer versions; open the folder itself.
+            ProcCommand::new(&explorer)
+                .arg(&target)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
     }
     #[cfg(not(windows))]
     {
-        let parent = PathBuf::from(&path)
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| PathBuf::from(&path));
         ProcCommand::new("xdg-open")
-            .arg(parent)
+            .arg(&target)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
