@@ -4,3 +4,7 @@
 *.log
 .DS_Store
 src-tauri/gen/
+release/*.exe
+release/*.apk
+release/*.msi
+release/*.zip

@@ -101,7 +101,11 @@ async function activateTab(id) {
 async function closeTab(id) {
   try { S.tabs = await invoke('close_tab', { id }); } catch (e) { return toast(e); }
   if (S.activeId === id) S.activeId = S.tabs.find(t => t.active)?.id ?? null;
-  if (!S.tabs.length) await newTab();
+  if (!S.tabs.length) {
+    // Closing the last tab closes the window, like a real browser.
+    await invoke('plugin:window|close', { label: 'main' }).catch(() => {});
+    return;
+  }
   renderTabs(); renderAddress();
 }
 async function navigate(input) {

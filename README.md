@@ -43,6 +43,21 @@ extension integration layers are implemented in Rust and covered by 43+ unit tes
 
 ---
 
+## Features added in this release
+
+- **Real multi-tab browsing** — every `+` / `Ctrl+T` opens a distinct tab; closing the last tab closes the window.
+- **Privacy dashboard** with live blocked-request counters, allowlisting, custom EasyList-style filters and per-domain statistics.
+- **Fingerprinting mitigations** — navigator, screen, canvas, audio, WebGL and timezone entropy reduction (in-page, best-effort).
+- **Safe Browsing** — bundled threat denylist plus real Google Safe Browsing API v5 checks when `VYRO_SAFE_BROWSING_KEY` is set. No simulated verdicts.
+- **Encrypted password vault** — Argon2 + AES-256-GCM; the master password is never stored.
+- **Reader mode and find-on-page** — toolbar buttons plus `Ctrl+F`, with match navigation.
+- **Tab groups** via right-click on a tab.
+- **VPN integration** — real connect/disconnect through a configured provider CLI, server/country selection, diagnostics, and an app-level kill switch. No provider is bundled and no connection is simulated.
+- **Companion extensions** — first-party scripts injected into matching pages, with an honest note that Chrome Web Store APIs are unavailable on webview engines.
+- **Swiss/minimal dark UI** — flat surfaces, no decorative glows, visible focus rings, reduced-motion support, and a light theme.
+
+See `docs/LIMITATIONS.md` for the features that are still honest gaps.
+
 ## Architecture at a glance
 
 ```
