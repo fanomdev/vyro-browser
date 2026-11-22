@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command as ProcCommand;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::sync::Mutex;
 use tauri::{
     webview::DownloadEvent, Emitter, LogicalPosition, LogicalSize, Manager, Webview, WebviewUrl, Wry,
@@ -55,6 +55,9 @@ pub struct AppState {
     /// App-level kill switch: blocks navigation when the VPN drops.
     network_gate: Mutex<bool>,
     vpn_gate_servers: Mutex<Vec<VpnGateServer>>,
+    /// Downloads popover is its own top-layer child webview so it can float
+    /// above the active page webview.
+    download_popover: Mutex<Option<TabWebview>>,
 }
 
 #[derive(Serialize)]
@@ -407,6 +410,9 @@ async fn new_tab(
 ) -> Result<Vec<TabView>, String> {
     let private = private.unwrap_or(false);
     let target = url.unwrap_or_default();
+    if let Some(pop) = state.download_popover.lock().unwrap().take() {
+        let _ = pop.close();
+    }
     let id = state.tabs.lock().unwrap().open(target.clone(), private);
     let fp = state.settings.lock().unwrap().fingerprinting_protection;
     let companion_code = state.companions.lock().unwrap().script_for("*");
@@ -769,6 +775,38 @@ async fn download_show_in_folder(path: String) -> Result<(), String> {
 async fn downloads_clear(state: tauri::State<'_, AppState>) -> Result<(), String> {
     state.downloads.lock().unwrap().clear_completed();
     Ok(())
+}
+
+#[tauri::command]
+async fn download_popover(show: bool, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    if let Some(old) = state.download_popover.lock().unwrap().take() {
+        let _ = old.close();
+    }
+    if !show {
+        return Ok(());
+    }
+    let window = app.get_window("main").ok_or("main window missing")?;
+    let (w, _h) = content_size(&window);
+    let seq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let label = format!("download-popover-{}", seq);
+    let wv = window
+        .add_child(
+            tauri::webview::WebviewBuilder::new(label, WebviewUrl::App("downloads-popover.html".into())),
+            LogicalPosition::new((w - 376.0).max(8.0), CHROME_H + 8.0),
+            LogicalSize::new(360.0, 420.0),
+        )
+        .map_err(|e| e.to_string())?;
+    *state.download_popover.lock().unwrap() = Some(wv);
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_download_settings(app: tauri::AppHandle) -> Result<(), String> {
+    app.emit("vyro://open-download-settings", json!({}))
+        .map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -1299,6 +1337,8 @@ pub fn run() {
             downloads_set_dir,
             download_show_in_folder,
             downloads_clear,
+            download_popover,
+            open_download_settings,
             blocker_stats,
             blocker_toggle,
             blocker_allow_site,
