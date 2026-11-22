@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VYRO Browser</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div id="browser">
+
+  <!-- ============ TITLEBAR / TAB STRIP ============ -->
+  <header class="titlebar" data-tauri-drag-region>
+    <div class="brand" data-tauri-drag-region>
+      <svg class="brand-mark" viewBox="0 0 512 512" aria-hidden="true">
+        <path d="M112 128 L196 128 L256 380 L176 380 Z" class="grad"/>
+        <path d="M316 128 L400 128 L336 380 L256 380 Z" class="grad"/>
+        <path d="M256 74 L270 100 L256 126 L242 100 Z" class="spark"/>
+      </svg>
+      <span class="brand-name">VYRO</span>
+    </div>
+    <div id="tabstrip" class="tabstrip" data-tauri-drag-region></div>
+    <button id="new-tab" class="icon-btn add-tab" title="New tab (Ctrl+T)" aria-label="New tab">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <div class="window-controls">
+      <button id="win-min" class="win-btn" title="Minimize" aria-label="Minimize"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      <button id="win-max" class="win-btn" title="Maximize" aria-label="Maximize"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg></button>
+      <button id="win-close" class="win-btn close" title="Close" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+  </header>
+
+  <!-- ============ TOOLBAR ============ -->
+  <div class="toolbar">
+    <div class="nav-buttons">
+      <button id="nav-back" class="icon-btn" title="Back (Alt+←)" aria-label="Back">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <button id="nav-forward" class="icon-btn" title="Forward (Alt+→)" aria-label="Forward">
+        <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+      <button id="nav-reload" class="icon-btn" title="Reload (Ctrl+R)" aria-label="Reload">
+        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7"/></svg>
+      </button>
+      <button id="nav-home" class="icon-btn" title="Home" aria-label="Home">
+        <svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-6v-6h-4v6H4z"/></svg>
+      </button>
+    </div>
+
+    <div class="omnibox" id="omnibox">
+      <button id="shield" class="shield" title="Protection stats" aria-label="Protection stats">
+        <svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.4 8.4-8 9-4.6-.6-8-4-8-9V6z"/></svg>
+        <span id="shield-count" class="shield-count">0</span>
+      </button>
+      <input id="address" class="address" type="text" spellcheck="false"
+             placeholder="Search or enter an address" aria-label="Address and search bar" autocomplete="off" />
+      <span id="engine-chip" class="engine-chip" title="Search engine">DDG</span>
+      <button id="bookmark-current" class="icon-btn small" title="Bookmark this tab (Ctrl+D)" aria-label="Bookmark">
+        <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+      </button>
+    </div>
+
+    <div class="tool-buttons">
+      <button class="icon-btn" data-panel="sidebar" title="Sidebar" aria-label="Sidebar">
+        <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM9 4v16"/></svg>
+      </button>
+      <button class="icon-btn" data-panel="extensions" title="Extensions" aria-label="Extensions">
+        <svg viewBox="0 0 24 24"><path d="M10 4h4v3h3v4h3v4h-3v3h-4v-3h-4v3H6v-3H3v-4h3V7h4z"/></svg>
+      </button>
+      <button class="icon-btn" data-panel="downloads" title="Downloads" aria-label="Downloads">
+        <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-5-5m5 5l5-5M5 20h14"/></svg>
+      </button>
+      <button class="icon-btn" data-panel="vpn" title="VPN" aria-label="VPN">
+        <svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7zM8 12l3 3 5-6"/></svg>
+      </button>
+      <button class="icon-btn" data-panel="privacy" title="Privacy dashboard" aria-label="Privacy dashboard">
+        <svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.4 8.4-8 9-4.6-.6-8-4-8-9V6z"/></svg>
+      </button>
+      <button class="icon-btn menu-btn" data-panel="settings" title="Menu & settings" aria-label="Menu">
+        <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside id="sidebar-panel" class="sidebar hidden">
+    <div class="side-head"><span class="brand-name">VYRO</span><button class="close-inline side-close" data-close aria-label="Close sidebar">×</button></div>
+    <button class="side-item" data-panel="history"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg> History</button>
+    <button class="side-item" data-panel="bookmarks"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg> Bookmarks</button>
+    <button class="side-item" data-panel="downloads"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-5-5m5 5l5-5M5 20h14"/></svg> Downloads</button>
+    <button class="side-item" data-panel="privacy"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.4 8.4-8 9-4.6-.6-8-4-8-9V6z"/></svg> Privacy</button>
+    <button class="side-item" data-panel="vpn"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7zM8 12l3 3 5-6"/></svg> VPN</button>
+    <button class="side-item" data-panel="extensions"><svg viewBox="0 0 24 24"><path d="M10 4h4v3h3v4h3v4h-3v3h-4v-3h-4v3H6v-3H3v-4h3V7h4z"/></svg> Extensions</button>
+    <button class="side-item" data-panel="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 00-1.7-1L14.7 3h-4l-.3 2.6a7 7 0 00-1.6 1l-2.3-1-2 3.4 2 1.5a7 7 0 000 2l-2 1.5 2 3.4 2.3-1a7 7 0 001.6 1l.3 2.6h4l.3-2.6a7 7 0 001.7-1l2.3 1 2-3.4-2-1.5c.1-.3.1-.7.1-1z"/></svg> Settings</button>
+    <div class="side-foot">Browse Beyond Limits.</div>
+  </aside>
+
+  <!-- ============ PANELS ============ -->
+  <main id="panels" class="panels hidden">
+
+    <section class="panel" data-name="privacy">
+      <div class="panel-head"><div><h1>Privacy Dashboard</h1><p>Your protection, at a glance.</p></div><button class="panel-back" data-close>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        Back to browsing
+      </button></div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-num" id="p-blocked">0</div><div class="stat-label">Trackers blocked</div></div>
+        <div class="stat-card"><div class="stat-num" id="p-filters">0</div><div class="stat-label">Active rules</div></div>
+        <div class="stat-card"><div class="stat-num" id="p-allowed">0</div><div class="stat-label">Allowed requests</div></div>
+        <div class="stat-card"><div class="stat-num" id="p-vpn">Off</div><div class="stat-label">VPN status</div></div>
+      </div>
+      <div class="card">
+        <h2>Protection controls</h2>
+        <label class="row"><span>Block ads &amp; trackers</span><input type="checkbox" id="p-toggle-blocker" class="switch"></label>
+        <label class="row"><span>HTTPS upgrades</span><input type="checkbox" id="p-toggle-https" class="switch"></label>
+        <label class="row"><span>Block third-party cookies</span><input type="checkbox" id="p-toggle-cookies" class="switch"></label>
+        <label class="row"><span>Fingerprinting protection <em>(best-effort)</em></span><input type="checkbox" id="p-toggle-fp" class="switch"></label>
+      </div>
+      <div class="card">
+        <h2>Top blocked domains</h2>
+        <div id="p-top-domains" class="list"></div>
+      </div>
+      <div class="card">
+        <h2>Site permissions</h2>
+        <div class="row"><input id="perm-origin" type="text" placeholder="https://example.com" />
+          <select id="perm-kind"><option value="camera">Camera</option><option value="microphone">Microphone</option><option value="location">Location</option><option value="notifications">Notifications</option></select>
+          <select id="perm-decision"><option value="allow">Allow</option><option value="block">Block</option><option value="ask">Ask</option></select>
+          <button class="btn" id="perm-save">Save</button>
+        </div>
+        <div id="perm-list" class="list"></div>
+      </div>
+    </section>
+
+    <section class="panel" data-name="blocker">
+      <div class="panel-head"><div><h1>Ad &amp; Tracker Blocker</h1><p>Network-level filtering with EasyList-style rules.</p></div><button class="panel-back" data-close>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        Back to browsing
+      </button></div>
+      <div class="card"><h2>Global protection</h2>
+        <label class="row"><span>Enable blocker</span><input type="checkbox" id="b-enabled" class="switch"></label>
+        <p class="muted">Rules: <span id="b-count">0</span> · Blocked: <span id="b-blocked">0</span></p>
+        <div class="row"><input id="b-site" placeholder="example.com" /><button class="btn" id="b-allow">Allow site</button><button class="btn ghost" id="b-unallow">Remove</button></div>
+        <div id="b-allowlist" class="chips"></div>
+      </div>
+      <div class="card"><h2>Add custom filters</h2>
+        <textarea id="b-filters" rows="6" placeholder="||tracker.example^&#10;@@||allowed.example^"></textarea>
+        <button class="btn primary" id="b-add-filters">Add filters</button>
+        <p class="muted">Paste EasyList/EasyPrivacy-compatible rules. Full lists can be added here.</p>
+      </div>
+      <div class="card"><h2>Recent blocks</h2><div id="b-recent" class="list"></div></div>
+    </section>
+
+    <section class="panel" data-name="vpn">
+      <div class="panel-head"><div><h1>VPN</h1><p>Provider-agnostic integration. No simulated connections.</p></div><button class="panel-back" data-close>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        Back to browsing
+      </button></div>
+      <div class="card"><h2>Connection</h2>
+        <div class="vpn-status" id="vpn-status">Disconnected</div>
+        <div class="row"><select id="vpn-provider"></select><select id="vpn-server"></select><button class="btn primary" id="vpn-connect">Connect</button><button class="btn" id="vpn-disconnect">Disconnect</button></div>
+        <label class="row"><span>Kill switch</span><input type="checkbox" id="vpn-kill" class="switch"></label>
+        <label class="row"><span>DNS leak protection</span><input type="checkbox" id="vpn-dns" class="switch"></label>
+        <label class="row"><span>Auto-reconnect</span><input type="checkbox" id="vpn-auto" class="switch"></label>
+      </div>
+      <div class="card"><h2>Diagnostics</h2><div id="vpn-diag" class="list"></div></div>
+      <div class="card"><h2>Add a provider</h2>
+        <textarea id="vpn-provider-json" rows="6" placeholder='{"id":"wg1","name":"My WG","protocol":"wireguard","servers":[{"id":"tokyo","country":"JP","city":"Tokyo"}],"connect_command":"wg-quick up /path/vyro.conf","disconnect_command":"wg-quick down /path/vyro.conf","credential_env":"VYRO_WG_KEY"}'></textarea>
+        <button class="btn" id="vpn-add-provider">Add provider</button>
+        <p class="muted">Credentials are read from the named environment variable and never stored by VYRO.</p>
+      </div>
+    </section>
+
+    <section class="panel" data-name="extensions">
+      <div class="panel-head"><div><h1>Extensions</h1><p>Manage unpacked extensions and view engine support.</p></div><button class="panel-back" data-close>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        Back to browsing
+      </button></div>
+      <div class="notice" id="ext-support"></div>
+      <div class="card"><h2>Installed</h2><div id="ext-list" class="list"></div>
+        <div class="row"><input id="ext-manifest" placeholder="Paste manifest.json" /><input id="ext-id" placeholder="extension-id" /><button class="btn" id="ext-install">Install</button></div>
+      </div>
+    </section>
+
+    <section class="panel" data-name="history">
+      <div class="panel-head"><div><h1>History</h1><p>Everything you've visited, searchable.</p></div><button class="panel-back" data-close>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        Back to browsing
+      </button></div>
+      <div class="card"><div class="row"><input id="hist-query" placeholder="Search history" /><button class="btn" id="hist-search">Search</button><button class="btn danger" id="hist-clear">Clear all</button></div>
+        <div id="hist-list" class="list"></div></div>
+    </section>
+
+    <section class="panel" data-name="bookmarks">
+      <div class="panel-head"><div><h1>Bookmarks</h1><p>Your saved places.</p></div><button class="panel-back" data-close>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        Back to browsing
+      </button></div>
+      <div class="card"><div class="row"><input id="bm-title" placeholder="Title" /><input id="bm-url" placeholder="https://…" /><input id="bm-folder" placeholder="Folder" /><button class="btn" id="bm-add">Add</button></div>
+        <div class="row"><button class="btn" id="bm-export">Export JSON</button><input type="file" id="bm-file" accept=".html,.json" /></div>
+        <div id="bm-list" class="list"></div></div>
+    </section>
+
+    <section class="panel" data-name="downloads">
+      <div class="panel-head"><div><h1>Downloads</h1></div><button class="panel-back" data-close>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        Back to browsing
+      </button></div>
+      <div class="card"><div id="dl-list" class="list"></div></div>
+    </section>
+
+    <section class="panel" data-name="settings">
+      <div class="panel-head"><div><h1>Settings</h1><p>Make VYRO yours.</p></div><button class="panel-back" data-close>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        Back to browsing
+      </button></div>
+      <div class="card"><h2>Appearance</h2>
+        <div class="row"><label>Theme</label><select id="s-theme"><option value="Dark">Dark</option><option value="Light">Light</option><option value="System">System</option></select></div>
+        <div class="row"><label>Accent</label><input type="color" id="s-accent" value="#7c5cff" /></div>
+        <div class="row"><label>Homepage</label><input id="s-home" placeholder="https://…" /></div>
+      </div>
+      <div class="card"><h2>Search &amp; startup</h2>
+        <div class="row"><label>Search engine</label><select id="s-engine"><option value="DuckDuckGo">DuckDuckGo</option><option value="Brave">Brave</option><option value="Google">Google</option><option value="Bing">Bing</option><option value="Startpage">Startpage</option></select></div>
+        <label class="row"><span>Restore session on startup</span><input type="checkbox" id="s-restore" class="switch"></label>
+        <label class="row"><span>Show bookmarks bar</span><input type="checkbox" id="s-bookmarksbar" class="switch"></label>
+      </div>
+      <div class="card"><h2>Privacy &amp; security</h2>
+        <label class="row"><span>Tracking protection</span><input type="checkbox" id="s-tracking" class="switch"></label>
+        <label class="row"><span>Safe browsing</span><input type="checkbox" id="s-safe" class="switch"></label>
+        <label class="row"><span>Clear data on exit</span><input type="checkbox" id="s-clear" class="switch"></label>
+      </div>
+      <button class="btn primary" id="s-save">Save settings</button>
+    </section>
+
+  </main>
+
+  <footer id="statusbar">
+    <span id="status-protection">◇ Protection active</span>
+    <span id="status-vpn">VPN: off</span>
+    <span class="tagline">Browse Beyond Limits.</span>
+  </footer>
+</div>
+<script src="./app.js"></script>
+</body>
+</html>

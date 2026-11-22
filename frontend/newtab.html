@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>New Tab — VYRO</title>
+<style>
+  :root { --accent:#7c5cff; --accent2:#22d3ee; }
+  * { box-sizing:border-box; }
+  body { margin:0; height:100vh; font-family:"Segoe UI",Inter,system-ui,sans-serif; color:#eef0f7;
+    background: radial-gradient(1000px 600px at 75% -10%, rgba(124,92,255,.20), transparent 60%),
+                radial-gradient(800px 500px at 10% 100%, rgba(34,211,238,.10), transparent 60%), #0b0b12;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px; }
+  .wrap { display:flex; flex-direction:column; align-items:center; gap:22px; width:min(640px,86vw); }
+  .logo { width:82px; height:82px; filter:drop-shadow(0 8px 30px rgba(124,92,255,.5)); }
+  h1 { margin:0; font-size:40px; letter-spacing:.22em; font-weight:800; }
+  .tag { color:#9297ac; letter-spacing:.16em; text-transform:uppercase; font-size:11px; margin-top:-14px; }
+  form { width:100%; }
+  input { width:100%; padding:16px 20px; border-radius:30px; border:1px solid rgba(255,255,255,.14);
+    background:rgba(24,24,38,.8); color:#fff; font-size:15px; outline:none; backdrop-filter:blur(12px);
+    box-shadow:0 12px 40px rgba(0,0,0,.4); transition:border-color .2s, box-shadow .2s; }
+  input:focus { border-color:var(--accent); box-shadow:0 0 0 4px rgba(124,92,255,.18); }
+  input::placeholder { color:#6d7288; }
+  .links { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
+  a { display:flex; align-items:center; gap:8px; padding:10px 15px; border-radius:12px; text-decoration:none;
+    color:#c9ccdb; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09); font-size:13px; transition:.15s; }
+  a:hover { background:rgba(255,255,255,.12); transform:translateY(-2px); color:#fff; }
+  .dot { width:9px; height:9px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent2)); }
+  footer { position:absolute; bottom:24px; color:#4b5065; font-size:11px; letter-spacing:.08em; }
+  .privacy { color:#22d3ee; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <svg class="logo" viewBox="0 0 512 512" aria-hidden="true">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#9B7BFF"/><stop offset="100%" stop-color="#22D3EE"/></linearGradient></defs>
+      <rect x="8" y="8" width="496" height="496" rx="112" fill="#101019" stroke="url(#g)" stroke-opacity=".35" stroke-width="2"/>
+      <path d="M112 128 L196 128 L256 380 L176 380 Z" fill="url(#g)"/>
+      <path d="M316 128 L400 128 L336 380 L256 380 Z" fill="url(#g)"/>
+      <path d="M256 74 L270 100 L256 126 L242 100 Z" fill="#22D3EE"/>
+    </svg>
+    <h1>VYRO</h1>
+    <div class="tag">Browse Beyond Limits.</div>
+    <form id="f"><input id="q" autocomplete="off" spellcheck="false" placeholder="Search privately or enter an address…" autofocus /></form>
+    <div class="links">
+      <a href="https://duckduckgo.com"><span class="dot"></span>DuckDuckGo</a>
+      <a href="https://github.com"><span class="dot"></span>GitHub</a>
+      <a href="https://doc.rust-lang.org"><span class="dot"></span>Rust</a>
+      <a href="https://en.wikipedia.org"><span class="dot"></span>Wikipedia</a>
+    </div>
+  </div>
+  <footer>Privacy-first · Ad &amp; tracker protection <span class="privacy">active</span></footer>
+<script>
+  const T = window.__TAURI_INTERNALS__ || {};
+  const invoke = (c,a={}) => T.invoke ? T.invoke(c,a) : Promise.reject('no ipc');
+  const form = document.getElementById('f'), q = document.getElementById('q');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!q.value.trim()) return;
+    try {
+      const tabs = await invoke('list_tabs');
+      const id = tabs.find(t => t.active)?.id ?? tabs[0]?.id;
+      if (id) await invoke('navigate', { id, input: q.value });
+    } catch (_) { location.href = 'https://duckduckgo.com/?q=' + encodeURIComponent(q.value); }
+  });
+</script>
+</body>
+</html>

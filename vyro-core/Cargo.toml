@@ -1,0 +1,13 @@
+[package]
+name = "vyro-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core browser logic for VYRO Browser — engine intents, ad/tracker blocking, tabs, bookmarks, history, privacy, VPN integration, and extensions."
+license = "MPL-2.0"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+
+[dev-dependencies]

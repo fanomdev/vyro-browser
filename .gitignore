@@ -1,0 +1,6 @@
+/target/
+**/target/
+**/*.rs.bk
+*.log
+.DS_Store
+src-tauri/gen/

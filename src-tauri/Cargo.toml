@@ -1,0 +1,23 @@
+[package]
+name = "vyro-browser"
+version = "0.1.0"
+description = "VYRO Browser — Browse Beyond Limits."
+edition = "2021"
+license = "MPL-2.0"
+
+[lib]
+name = "vyro_browser_lib"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["unstable"] }
+vyro-core = { path = "../vyro-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
