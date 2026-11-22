@@ -1018,6 +1018,13 @@ async fn reader_mode(id: u64, state: tauri::State<'_, AppState>) -> Result<bool,
 }
 
 #[tauri::command]
+async fn tab_move(id: u64, index: usize, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<Vec<TabView>, String> {
+    state.tabs.lock().unwrap().move_tab(id, index);
+    emit_state(&app, &state);
+    Ok(tab_views(&state))
+}
+
+#[tauri::command]
 async fn tab_set_group(id: u64, group: Option<String>, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<Vec<TabView>, String> {
     state.tabs.lock().unwrap().set_group(id, group);
     emit_state(&app, &state);
@@ -1185,6 +1192,7 @@ pub fn run() {
             find_in_page,
             reader_mode,
             tab_set_group,
+            tab_move,
             vault_state,
             vault_init,
             vault_unlock,

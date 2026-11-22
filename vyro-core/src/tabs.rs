@@ -178,6 +178,17 @@ impl TabManager {
         Some(next)
     }
 
+    /// Move a tab to a new position so users can reorder by dragging.
+    pub fn move_tab(&mut self, id: u64, to: usize) -> bool {
+        let Some(from) = self.tabs.iter().position(|t| t.id == id) else {
+            return false;
+        };
+        let target = to.min(self.tabs.len() - 1);
+        let tab = self.tabs.remove(from);
+        self.tabs.insert(target, tab);
+        true
+    }
+
     pub fn close_others(&mut self, keep: u64) {
         self.tabs.retain(|t| t.id == keep);
         self.active = Some(keep);
@@ -226,6 +237,20 @@ mod tests {
         assert!(m.close(b));
         assert_eq!(m.active_id(), Some(a));
         assert!(!m.close(999));
+    }
+
+    #[test]
+    fn tabs_can_be_reordered() {
+        let mut m = TabManager::new();
+        let a = m.open("a", false);
+        let b = m.open("b", false);
+        let c = m.open("c", false);
+        assert!(m.move_tab(c, 0));
+        let urls: Vec<&str> = m.list().iter().map(|t| t.url.as_str()).collect();
+        assert_eq!(urls, vec!["c", "a", "b"]);
+        m.move_tab(a, 99);
+        assert_eq!(m.list()[2].id, a);
+        assert!(!m.move_tab(999, 0));
     }
 
     #[test]

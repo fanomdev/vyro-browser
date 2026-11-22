@@ -104,25 +104,50 @@ function renderTabs() {
 let dragMoved = false;
 function bindTabStripScrolling() {
   const strip = $('#tabstrip');
+  // Wheel over the strip or any tab scrolls horizontally.
   strip.addEventListener('wheel', (e) => {
     if (strip.scrollWidth <= strip.clientWidth) return;
     e.preventDefault();
-    strip.scrollLeft += Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? strip.clientWidth : 1;
+    const delta = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    strip.scrollLeft += delta * unit;
   }, { passive: false });
-  let startX = 0, startScroll = 0, dragging = false;
+
+  let drag = null;
   strip.addEventListener('pointerdown', (e) => {
     if (e.target.closest('.tab-close')) return;
-    dragging = true; dragMoved = false;
-    startX = e.clientX; startScroll = strip.scrollLeft;
+    const tab = e.target.closest('.tab');
+    drag = { x: e.clientX, scroll: strip.scrollLeft, tab, id: tab ? Number(tab.dataset.tabId) : null, moved: false };
+    dragMoved = false;
   });
   window.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    const dx = e.clientX - startX;
-    if (Math.abs(dx) > 4) { dragMoved = true; strip.classList.add('dragging'); }
-    if (dragMoved) strip.scrollLeft = startScroll - dx;
+    if (!drag) return;
+    const dx = e.clientX - drag.x;
+    if (Math.abs(dx) > 5) {
+      drag.moved = true; dragMoved = true; strip.classList.add('dragging');
+      if (drag.tab) drag.tab.classList.add('reordering');
+    }
+    if (!drag.moved) return;
+    if (drag.tab) {
+      const tabs = [...strip.querySelectorAll('.tab:not(.tab-exit)')];
+      const moving = drag.tab;
+      const before = tabs.find(t => e.clientX < t.getBoundingClientRect().left + t.getBoundingClientRect().width / 2);
+      if (before && before !== moving) strip.insertBefore(moving, before);
+      else if (!before && tabs.length && tabs[tabs.length - 1] !== moving) strip.appendChild(moving);
+    } else {
+      strip.scrollLeft = drag.scroll - dx;
+    }
   });
-  window.addEventListener('pointerup', () => {
-    dragging = false; strip.classList.remove('dragging');
+  window.addEventListener('pointerup', async () => {
+    if (!drag) return;
+    const finished = drag; drag = null;
+    strip.classList.remove('dragging');
+    if (finished.tab) finished.tab.classList.remove('reordering');
+    if (finished.tab && finished.moved) {
+      const index = [...strip.querySelectorAll('.tab:not(.tab-exit)')].indexOf(finished.tab);
+      try { S.tabs = await invoke('tab_move', { id: finished.id, index }); renderTabs(); }
+      catch (err) { toast(err); renderTabs(); }
+    }
     setTimeout(() => { dragMoved = false; }, 0);
   });
 }
