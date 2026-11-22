@@ -14,6 +14,7 @@ const S = {
 /* --------------------------- boot --------------------------- */
 async function boot() {
   bindUI();
+  bindTabStripScrolling();
   await loadAll();
   if (!S.tabs.length) await newTab();
   listenForState();
@@ -67,6 +68,7 @@ const activeTab = () => S.tabs.find(t => t.id === S.activeId);
 let renderedTabIds = new Set();
 function renderTabs() {
   const strip = $('#tabstrip');
+  const savedScroll = strip.scrollLeft;
   const incoming = new Set(S.tabs.map(t => t.id));
   const ghosts = [...renderedTabIds].filter(id => !incoming.has(id)).map(id => {
     const el = strip.querySelector(`[data-tab-id="${id}"]`);
@@ -92,7 +94,14 @@ function renderTabs() {
     setTimeout(() => g.remove(), 190);
   });
   renderedTabIds = incoming;
+  strip.scrollLeft = savedScroll;
   $('#tab-count').textContent = S.tabs.length;
+  const updateArrows = () => {
+    $('#tabs-left').disabled = strip.scrollLeft <= 0;
+    $('#tabs-right').disabled = strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 1;
+  };
+  strip.onscroll = updateArrows;
+  updateArrows();
   const active = strip.querySelector('.tab.active');
   if (active) {
     const sr = strip.getBoundingClientRect(), ar = active.getBoundingClientRect();
@@ -444,6 +453,25 @@ async function saveSettings() {
 }
 
 /* --------------------------- helpers --------------------------- */
+function showTabListMenu(anchor) {
+  $$('.tab-menu').forEach(m => m.remove());
+  const menu = document.createElement('div');
+  menu.className = 'tab-menu';
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.min(r.left, window.innerWidth - 260) + 'px';
+  menu.style.top = (r.bottom + 6) + 'px';
+  S.tabs.forEach((t, i) => {
+    const b = document.createElement('button');
+    b.textContent = `${i + 1}. ${t.group ? t.group + ' · ' : ''}${t.title || t.url || 'New Tab'}`;
+    b.onclick = () => { menu.remove(); activateTab(t.id); };
+    menu.appendChild(b);
+  });
+  document.body.appendChild(menu);
+  setTimeout(() => {
+    const close = e => { if (!menu.contains(e.target) && e.target !== anchor) { menu.remove(); document.removeEventListener('mousedown', close); } };
+    document.addEventListener('mousedown', close);
+  }, 0);
+}
 function showTabMenu(x, y, id, group) {
   $$('.tab-menu').forEach(m => m.remove());
   const menu = document.createElement('div');
@@ -488,6 +516,9 @@ function toast(msg) {
 /* --------------------------- bindings --------------------------- */
 function bindUI() {
   $('#new-tab').onclick = () => newTab();
+  $('#tab-count').onclick = e => showTabListMenu(e.currentTarget);
+  $('#tabs-left').onclick = () => { $('#tabstrip').scrollLeft -= 260; };
+  $('#tabs-right').onclick = () => { $('#tabstrip').scrollLeft += 260; };
   $('#nav-back').onclick = goBack;
   $('#nav-forward').onclick = goForward;
   $('#nav-reload').onclick = reload;

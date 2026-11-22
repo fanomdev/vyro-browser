@@ -59,8 +59,13 @@ button { cursor: pointer; }
 .brand-mark .grad { fill: var(--accent); }
 .brand-mark .spark { fill: var(--text); }
 .brand-name { font-weight: 700; letter-spacing: 0.18em; font-size: 11px; }
-.tab-count { font-size: 10px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.tabstrip { flex: 1; display: flex; align-items: flex-end; gap: 4px; height: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding-top: 5px; cursor: grab; }
+.tab-count { font-size: 10px; font-weight: 700; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.tab-count:hover { color: var(--text); border-color: var(--accent); }
+.tab-scroll { width: 20px; height: 26px; border: 0; background: transparent; color: var(--muted); border-radius: 5px; display: grid; place-items: center; flex-shrink: 0; }
+.tab-scroll:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.tab-scroll:disabled { opacity: .25; cursor: default; }
+.tab-scroll svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tabstrip { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 4px; height: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding-top: 5px; cursor: grab; }
 .tabstrip.dragging { cursor: grabbing; }
 .tab-enter { animation: tabIn 180ms cubic-bezier(.2,.8,.2,1) both; transform-origin: left center; }
 .tab-exit { animation: tabOut 170ms ease-in both; pointer-events: none; transform-origin: left center; }
@@ -70,7 +75,7 @@ button { cursor: pointer; }
 .tabstrip::-webkit-scrollbar { display: none; }
 .tab {
   position: relative; display: flex; align-items: center; gap: 8px;
-  min-width: 120px; max-width: 230px; height: 30px; padding: 0 6px 0 10px;
+  min-width: 72px; max-width: 200px; height: 30px; padding: 0 6px 0 10px; flex: 0 1 auto;
   background: var(--surface-2); color: var(--muted); border-radius: 8px 8px 0 0;
   transition: background 150ms ease, color 150ms ease; cursor: pointer; flex-shrink: 0;
 }

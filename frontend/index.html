@@ -19,11 +19,17 @@
       </svg>
       <span class="brand-name">VYRO</span>
     </div>
-    <span id="tab-count" class="tab-count" title="Open tabs">0</span>
+    <button id="tab-count" class="tab-count" title="All open tabs">0</button>
     <button id="new-tab" class="add-tab" title="New tab (Ctrl+T)" aria-label="New tab">
       <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
     </button>
-    <div id="tabstrip" class="tabstrip" data-tauri-drag-region></div>
+    <button id="tabs-left" class="tab-scroll" title="Scroll tabs left" aria-label="Scroll tabs left">
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <div id="tabstrip" class="tabstrip"></div>
+    <button id="tabs-right" class="tab-scroll" title="Scroll tabs right" aria-label="Scroll tabs right">
+      <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
     <div class="window-controls">
       <button id="win-min" class="win-btn" title="Minimize" aria-label="Minimize"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
       <button id="win-max" class="win-btn" title="Maximize" aria-label="Maximize"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg></button>
