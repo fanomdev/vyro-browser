@@ -278,30 +278,66 @@
     </section>
 
     <section class="panel" data-name="settings">
-      <div class="panel-head"><div><h1>Settings</h1><p>Make VYRO yours.</p></div><button class="panel-back" data-close>
+      <div class="panel-head"><div><h1>Settings</h1><p>Shape VYRO around the way you browse.</p></div><button class="panel-back" data-close>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
         Back to browsing
       </button></div>
-      <div class="card"><h2>Appearance</h2>
-        <div class="row"><label>Theme</label><select id="s-theme"><option value="Dark">Dark</option><option value="Light">Light</option><option value="System">System</option></select></div>
-        <div class="row"><label>Accent</label><input type="color" id="s-accent" value="#7c5cff" /></div>
-        <div class="row"><label>Homepage</label><input id="s-home" placeholder="https://…" /></div>
+
+      <div class="settings-grid">
+        <div class="card settings-card">
+          <div class="card-title"><h2>Appearance</h2><p>Colors and surfaces</p></div>
+          <div class="field"><label>Theme</label>
+            <div class="segment" id="s-theme" role="group" aria-label="Theme">
+              <button type="button" data-value="Dark">Dark</button>
+              <button type="button" data-value="Light">Light</button>
+              <button type="button" data-value="System">System</button>
+            </div>
+          </div>
+          <div class="field"><label>Accent color</label>
+            <div class="swatches" id="s-swatches" role="group" aria-label="Accent color">
+              <button type="button" class="swatch" data-color="#7c5cff" style="--sw:#7c5cff" title="Violet"></button>
+              <button type="button" class="swatch" data-color="#35d6e8" style="--sw:#35d6e8" title="Cyan"></button>
+              <button type="button" class="swatch" data-color="#22c55e" style="--sw:#22c55e" title="Green"></button>
+              <button type="button" class="swatch" data-color="#f59e0b" style="--sw:#f59e0b" title="Amber"></button>
+              <label class="swatch custom" title="Custom color"><input type="color" id="s-accent" value="#7c5cff" aria-label="Custom accent color" /></label>
+            </div>
+          </div>
+          <div class="field"><label for="s-home">Homepage</label><input id="s-home" type="text" placeholder="https://…" /></div>
+        </div>
+
+        <div class="card settings-card">
+          <div class="card-title"><h2>Search &amp; startup</h2><p>Where you begin</p></div>
+          <div class="field"><label>Search engine</label>
+            <div class="segment wrap" id="s-engine" role="group" aria-label="Search engine">
+              <button type="button" data-value="DuckDuckGo">DuckDuckGo</button>
+              <button type="button" data-value="Brave">Brave</button>
+              <button type="button" data-value="Google">Google</button>
+              <button type="button" data-value="Bing">Bing</button>
+              <button type="button" data-value="Startpage">Startpage</button>
+            </div>
+          </div>
+          <label class="field"><span>Restore session on startup</span><input type="checkbox" id="s-restore" class="switch" /></label>
+          <label class="field"><span>Show bookmarks bar</span><input type="checkbox" id="s-bookmarksbar" class="switch" /></label>
+        </div>
+
+        <div class="card settings-card">
+          <div class="card-title"><h2>Downloads</h2><p>Where files land</p></div>
+          <div class="field"><label for="s-downloaddir">Save to</label><input id="s-downloaddir" type="text" placeholder="C:\Users\You\Downloads" /></div>
+          <p class="muted field-note">Paste any absolute folder path. The folder is created if needed.</p>
+        </div>
+
+        <div class="card settings-card">
+          <div class="card-title"><h2>Privacy &amp; security</h2><p>Protection defaults</p></div>
+          <label class="field"><span>Tracking protection</span><input type="checkbox" id="s-tracking" class="switch" /></label>
+          <label class="field"><span>Safe browsing</span><input type="checkbox" id="s-safe" class="switch" /></label>
+          <label class="field"><span>Clear data on exit</span><input type="checkbox" id="s-clear" class="switch" /></label>
+        </div>
       </div>
-      <div class="card"><h2>Search &amp; startup</h2>
-        <div class="row"><label>Search engine</label><select id="s-engine"><option value="DuckDuckGo">DuckDuckGo</option><option value="Brave">Brave</option><option value="Google">Google</option><option value="Bing">Bing</option><option value="Startpage">Startpage</option></select></div>
-        <label class="row"><span>Restore session on startup</span><input type="checkbox" id="s-restore" class="switch"></label>
-        <label class="row"><span>Show bookmarks bar</span><input type="checkbox" id="s-bookmarksbar" class="switch"></label>
+
+      <div id="save-bar" class="save-bar" aria-live="polite">
+        <span class="save-state"><span class="save-dot"></span><span id="save-status">All changes saved</span></span>
+        <span class="save-actions"><button id="s-discard" class="btn ghost">Discard</button><button id="s-save" class="btn primary">Save settings</button></span>
       </div>
-      <div class="card"><h2>Downloads</h2>
-        <div class="row"><label>Save to</label><input id="s-downloaddir" type="text" placeholder="C:\Users\You\Downloads" /></div>
-        <p class="muted">Paste any absolute folder path. The folder is created if it does not exist.</p>
-      </div>
-      <div class="card"><h2>Privacy &amp; security</h2>
-        <label class="row"><span>Tracking protection</span><input type="checkbox" id="s-tracking" class="switch"></label>
-        <label class="row"><span>Safe browsing</span><input type="checkbox" id="s-safe" class="switch"></label>
-        <label class="row"><span>Clear data on exit</span><input type="checkbox" id="s-clear" class="switch"></label>
-      </div>
-      <button class="btn primary" id="s-save">Save settings</button>
     </section>
 
   </main>

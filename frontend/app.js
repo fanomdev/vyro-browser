@@ -397,18 +397,32 @@ async function renderCompanions() {
 }
 
 /* --------------------------- settings --------------------------- */
-async function renderSettings() {
+function setSegment(id, value) {
+  $$(`#${id} button`).forEach(b => b.classList.toggle('active', b.dataset.value === value));
+}
+function clearSaveBar() {
+  $('#save-bar').classList.remove('show');
+  $('#save-status').textContent = 'All changes saved';
+}
+function markSettingsDirty() {
+  $('#save-bar').classList.add('show');
+  $('#save-status').textContent = 'Unsaved changes';
+}
+function renderSettings() {
   const s = S.settings; if (!s) return;
-  $('#s-theme').value = cap(s.theme);
+  setSegment('s-theme', cap(s.theme));
+  setSegment('s-engine', s.search_engine || 'DuckDuckGo');
   $('#s-accent').value = s.accent_color || '#7c5cff';
+  $$('#s-swatches .swatch:not(.custom)').forEach(b =>
+    b.classList.toggle('active', b.dataset.color.toLowerCase() === (s.accent_color || '').toLowerCase()));
   $('#s-home').value = s.homepage || '';
-  $('#s-engine').value = s.search_engine || 'DuckDuckGo';
   $('#s-restore').checked = !!s.restore_session;
   $('#s-bookmarksbar').checked = !!s.show_bookmarks_bar;
   $('#s-tracking').checked = !!s.tracking_protection;
   $('#s-safe').checked = !!s.safe_browsing;
   $('#s-clear').checked = !!s.clear_on_exit;
   $('#s-downloaddir').value = s.download_dir || '';
+  clearSaveBar();
 }
 const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : 'Dark';
 function applyTheme(s) {
@@ -418,10 +432,10 @@ function applyTheme(s) {
 }
 async function saveSettings() {
   const s = { ...S.settings };
-  s.theme = cap($('#s-theme').value);
+  s.theme = $('#s-theme button.active')?.dataset.value || 'Dark';
   s.accent_color = $('#s-accent').value;
   s.homepage = $('#s-home').value;
-  s.search_engine = $('#s-engine').value;
+  s.search_engine = $('#s-engine button.active')?.dataset.value || 'DuckDuckGo';
   s.restore_session = $('#s-restore').checked;
   s.show_bookmarks_bar = $('#s-bookmarksbar').checked;
   s.tracking_protection = $('#s-tracking').checked;
@@ -431,7 +445,7 @@ async function saveSettings() {
   try {
     await invoke('settings_update', { value: s });
     await invoke('downloads_set_dir', { path: s.download_dir });
-    S.settings = s; applyTheme(s); toast('Settings saved');
+    S.settings = s; applyTheme(s); clearSaveBar(); toast('Settings saved');
   } catch (e) { toast('Save failed: ' + e); }
 }
 
@@ -596,6 +610,31 @@ function bindUI() {
   };
 
   $('#s-save').onclick = saveSettings;
+  $('#s-discard').onclick = () => { renderSettings(); toast('Changes discarded'); };
+  ['s-theme', 's-engine'].forEach(id => {
+    $$(`#${id} button`).forEach(b => b.onclick = () => {
+      setSegment(id, b.dataset.value);
+      markSettingsDirty();
+      if (id === 's-theme') applyTheme({ ...S.settings, theme: b.dataset.value });
+    });
+  });
+  $$('#s-swatches .swatch:not(.custom)').forEach(b => b.onclick = () => {
+    $$('#s-swatches .swatch').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    $('#s-accent').value = b.dataset.color;
+    applyTheme({ ...S.settings, accent_color: b.dataset.color });
+    markSettingsDirty();
+  });
+  $('#s-accent').oninput = e => {
+    $$('#s-swatches .swatch').forEach(x => x.classList.remove('active'));
+    applyTheme({ ...S.settings, accent_color: e.target.value });
+    markSettingsDirty();
+  };
+  $$('.panel[data-name="settings"] input, .panel[data-name="settings"] textarea').forEach(el => {
+    if (el.id === 's-accent') return;
+    el.addEventListener('change', markSettingsDirty);
+    el.addEventListener('input', markSettingsDirty);
+  });
 
   $('#tool-find').onclick = async () => {
     try { await invoke('find_in_page', { id: S.activeId, query: '' }); } catch (e) { toast(e); }
