@@ -50,6 +50,16 @@ What is not:
 - No private provider, credentials, or API keys are bundled. The bundled US `.ovpn` is
   a public sample and may be stale; the live feed is preferred.
 
+### Working source, with a local prerequisite
+
+- **VPNBook** is integrated for real: public `.ovpn` configs and the current shared
+  password are fetched at connect time (live-tested), and OpenVPN authentication
+  succeeds. The remaining local requirement is an installed **TAP-Windows6 adapter**,
+  which needs a one-time administrator install of OpenVPN. A plain extracted
+  `openvpn.exe` will authenticate and then fail at `open_tun`. VYRO reports that
+  failure honestly instead of showing "connected". Shared credentials are not for
+  sensitive traffic.
+
 ### Providers evaluated and why they are not bundled
 
 - **VPN Gate** (public feed): real OpenVPN configs, but tested servers returned

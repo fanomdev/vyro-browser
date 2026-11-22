@@ -192,6 +192,11 @@
         <label class="row"><span>Auto-reconnect</span><input type="checkbox" id="vpn-auto" class="switch"></label>
       </div>
       <div class="notice" id="vpn-guide"><b>No private VPN provider is bundled.</b> Use VPN Gate below for real public OpenVPN servers, or add your own provider with a real tunnel command. VYRO never simulates a connection.</div>
+      <div class="card"><h2>VPNBook (no signup)</h2>
+        <p class="muted">Real public OpenVPN configs. Credentials are fetched live and rotate every 1–2 weeks. Needs an installed OpenVPN TAP adapter (admin install).</p>
+        <div class="row"><input id="vb-openvpn" placeholder="OpenVPN path (openvpn.exe)" /><select id="vb-protocol"></select></div>
+        <div class="row"><select id="vb-server"></select><button class="btn primary" id="vb-connect">Connect</button></div>
+      </div>
       <div class="card"><h2>VPN Gate servers</h2>
         <p class="muted">Public servers from the Vpngate-Scraper-API. Respect each operator's terms of use. Creating the adapter usually requires administrator rights.</p>
         <div class="row"><input id="vg-openvpn" placeholder="OpenVPN path (openvpn.exe)" /><button class="btn" id="vg-refresh">Refresh servers</button></div>

@@ -31,6 +31,7 @@ use vyro_core::settings::Settings;
 use vyro_core::tabs::TabManager;
 use vyro_core::vault::Vault;
 use vyro_core::vpn::{VpnManager, VpnProviderConfig, VpnServer, VpnStatus};
+use vyro_core::vpn_book;
 use vyro_core::vpn_gate::{self as vpngate, VpnGateServer};
 use vyro_core::APP_NAME;
 
@@ -1132,6 +1133,7 @@ fn connect_openvpn(
     name: &str,
     config: &str,
     openvpn_path: &str,
+    auth_path: Option<&str>,
     server: VpnServer,
 ) -> Result<(), String> {
     if openvpn_path.contains(['/', '\\']) && !std::path::Path::new(openvpn_path).exists() {
@@ -1149,7 +1151,14 @@ fn connect_openvpn(
         servers: vec![server.clone()],
         background: true,
         connect_program: Some(openvpn_path.to_string()),
-        connect_args: vec!["--config".into(), config_path.to_string_lossy().into_owned()],
+        connect_args: {
+            let mut args = vec!["--config".into(), config_path.to_string_lossy().into_owned()];
+            if let Some(auth) = auth_path {
+                args.push("--auth-user-pass".into());
+                args.push(auth.to_string());
+            }
+            args
+        },
         ..Default::default()
     };
     let mut vpn = state.vpn.lock().unwrap();
@@ -1200,6 +1209,7 @@ async fn vpn_gate_connect(
         &format!("VPN Gate · {}", server.hostname),
         &config,
         &exe,
+        None,
         VpnServer {
             id: index.to_string(),
             country: server.country_code,
@@ -1224,10 +1234,56 @@ async fn vpn_gate_bundled_connect(
         "VPN Gate · bundled US server",
         config,
         &exe,
+        None,
         VpnServer {
             id: "bundled-us".into(),
             country: "US".into(),
             city: "Bundled sample".into(),
+        },
+    )?;
+    emit_state(&app, &state);
+    Ok(())
+}
+
+#[tauri::command]
+async fn vpnbook_info() -> Result<Value, String> {
+    Ok(json!({
+        "servers": vpn_book::SERVERS,
+        "protocols": vpn_book::PROTOCOLS,
+        "password_note": "Password is fetched live from VPNBook at connect time; it rotates every 1-2 weeks."
+    }))
+}
+
+#[tauri::command]
+async fn vpnbook_connect(
+    index: usize,
+    protocol: String,
+    openvpn_path: Option<String>,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let server = vpn_book::SERVERS.get(index).ok_or("Unknown VPNBook server")?;
+    let config = vpn_book::config(server.hostname, &protocol)?;
+    let password = vpn_book::password()?;
+    let dir = {
+        let d = state.data_dir.lock().unwrap().clone();
+        fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+        d
+    };
+    let auth_path = dir.join("vpnbook.auth");
+    fs::write(&auth_path, vpn_book::auth_file(&password)).map_err(|e| e.to_string())?;
+    let exe = openvpn_path.unwrap_or_else(|| "openvpn".into());
+    connect_openvpn(
+        &state,
+        "vpnbook",
+        &format!("VPNBook · {}", server.hostname),
+        &config,
+        &exe,
+        Some(auth_path.to_string_lossy().as_ref()),
+        VpnServer {
+            id: index.to_string(),
+            country: server.code.to_string(),
+            city: server.hostname.to_string(),
         },
     )?;
     emit_state(&app, &state);
@@ -1459,6 +1515,8 @@ pub fn run() {
             vpn_gate_servers,
             vpn_gate_connect,
             vpn_gate_bundled_connect,
+            vpnbook_info,
+            vpnbook_connect,
             extensions_list,
             extensions_install,
             extensions_toggle,

@@ -193,7 +193,7 @@ async function openPanel(name) {
   try { await invoke('set_content_visible', { visible: false }); } catch (_) {}
   if (name === 'privacy') await renderPrivacy();
   if (name === 'blocker') await refreshBlocker(true);
-  if (name === 'vpn') { await renderVpn(); await renderVpnGate(); }
+  if (name === 'vpn') { await renderVpn(); await renderVpnBook(); await renderVpnGate(); }
   if (name === 'extensions') await renderExtensions();
   if (name === 'history') await renderHistory();
   if (name === 'bookmarks') await renderBookmarks();
@@ -279,6 +279,16 @@ function vpnLabel(s) {
   if (s.Reconnecting) return 'Reconnecting…';
   if (s.Error) return 'Error: ' + s.Error;
   return 'Disconnected';
+}
+async function renderVpnBook() {
+  try {
+    const info = await invoke('vpnbook_info');
+    const servers = info.servers || [];
+    $('#vb-server').innerHTML = servers.map((s, i) =>
+      `<option value="${i}">${esc(s.country)} · ${esc(s.hostname)}</option>`).join('');
+    $('#vb-protocol').innerHTML = (info.protocols || []).map(p =>
+      `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  } catch (e) { toast('VPNBook: ' + e); }
 }
 async function renderVpnGate(refresh = false) {
   try {
@@ -566,6 +576,16 @@ function bindUI() {
   $('#vpn-kill').onchange = e => patch('vpn_kill_switch', e.target.checked);
   $('#vpn-dns').onchange = e => patch('vpn_dns_leak_protection', e.target.checked);
   $('#vpn-auto').onchange = e => patch('vpn_auto_reconnect', e.target.checked);
+  $('#vb-connect').onclick = async () => {
+    try {
+      await invoke('vpnbook_connect', {
+        index: Number($('#vb-server').value),
+        protocol: $('#vb-protocol').value,
+        openvpnPath: $('#vb-openvpn').value || null
+      });
+      toast('VPNBook connected'); renderVpn();
+    } catch (e) { toast(String(e)); }
+  };
   $('#vg-refresh').onclick = () => renderVpnGate(true);
   $('#vg-connect').onclick = async () => {
     try {
