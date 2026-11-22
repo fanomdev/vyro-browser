@@ -319,6 +319,7 @@ fn persist(state: &AppState) {
 
 fn load_initial(state: &AppState) {
     let dir = state.data_dir.lock().unwrap();
+    let _ = fs::create_dir_all(&*dir);
     if let Ok(s) = fs::read(dir.join("settings.json")) {
         if let Ok(v) = serde_json::from_slice::<Settings>(&s) {
             *state.settings.lock().unwrap() = v;

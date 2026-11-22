@@ -83,6 +83,15 @@ Full rationale: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
+## Installing on any drive
+
+Download from the [releases page](https://github.com/fanomdev/vyro-browser/releases):
+
+- **`vyro-browser-setup.exe`** — NSIS installer. Pick any drive/folder during setup. A `portable` marker is installed beside the EXE, so all browser data lives in `vyro-data` next to it — never forced onto C:.
+- **`vyro-browser-portable.zip`** — unzip the whole folder to any drive and run `vyro-browser.exe`. Copy that folder to another computer and it works there too.
+
+Both include `WebView2Loader.dll`. A bare EXE alone will not start.
+
 ## Quick start (Windows, this machine)
 
 Rust is installed on drive `I:` because `C:` is full. Use:

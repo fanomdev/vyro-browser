@@ -26,6 +26,16 @@ pub fn current_os() -> Os {
 /// Resolve the directory used for VYRO's persistent state.
 /// Keeps all state under one folder so "clear browsing data" is reliable.
 pub fn data_dir(app: &str) -> PathBuf {
+    // Portable mode: a `portable` marker next to the executable keeps all
+    // browser state beside it, so VYRO can run from any drive without touching
+    // the user profile on C:.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            if dir.join("portable").exists() {
+                return portable_data_dir(dir, app);
+            }
+        }
+    }
     match current_os() {
         Os::Windows => {
             let base = std::env::var_os("LOCALAPPDATA")
@@ -44,6 +54,11 @@ pub fn data_dir(app: &str) -> PathBuf {
     }
 }
 
+/// State folder used when running in portable mode.
+fn portable_data_dir(exe_dir: &std::path::Path, app: &str) -> PathBuf {
+    exe_dir.join(format!("{}-data", app.to_ascii_lowercase()))
+}
+
 fn home() -> PathBuf {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
@@ -58,5 +73,11 @@ mod tests {
     fn data_dir_is_under_a_writable_root() {
         let d = data_dir("vyro-test");
         assert!(d.to_string_lossy().contains("vyro-test"));
+    }
+
+    #[test]
+    fn portable_data_dir_sits_beside_executable() {
+        let d = portable_data_dir(std::path::Path::new("D:\\VYRO"), "VYRO");
+        assert_eq!(d, std::path::Path::new("D:\\VYRO\\vyro-data"));
     }
 }

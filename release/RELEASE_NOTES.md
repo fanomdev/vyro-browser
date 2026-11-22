@@ -4,6 +4,13 @@
 
 Windows desktop beta. This is a working foundation, not a finished Chrome/Brave replacement.
 
+## Download the right file
+
+- **`vyro-browser-setup.exe`** — installer. Choose any drive/folder during setup. Data is stored in a `vyro-data` folder next to the installed EXE, so it works on any drive.
+- **`vyro-browser-portable.zip`** — extract the whole ZIP to any drive and run `vyro-browser.exe`. The `portable` marker makes VYRO keep its data in `vyro-data` beside the EXE. Copy the whole folder to another PC and it still works.
+
+**Do not download only `vyro-browser.exe`.** It needs `WebView2Loader.dll` in the same folder. The ZIP and installer both include it.
+
 ## What works
 - Real webpage rendering (WebView2) with multiple tabs, back/forward, reload, home.
 - Address bar with search-engine selection and HTTPS upgrades.
@@ -11,25 +18,17 @@ Windows desktop beta. This is a working foundation, not a finished Chrome/Brave 
 - Privacy dashboard, site permissions, cookie policy, fingerprinting mitigations.
 - Safe Browsing: bundled threat denylist + real Google Safe Browsing API when a key is set.
 - Encrypted password vault (Argon2 + AES-256-GCM), reader mode, find-on-page, tab groups.
-- Bookmarks (Netscape HTML import / JSON export), history, privacy controls.
-- VPN integration with a configured provider CLI, diagnostics, and an app-level kill switch.
+- Bookmarks, history, VPN provider integration with an app-level kill switch.
 - VYRO companion scripts (first-party alternative to unsupported Chrome extensions).
 
-## What does not work / is limited
-- **VPN has no bundled provider.** You must configure a real tunneling command. VYRO refuses to simulate connections. Nothing is bundled or faked.
-- Chrome Web Store extensions are not supported by the system webview engine.
-- DNS leak protection is a settings flag; the kill switch gates VYRO only, not the OS.
-- Downloads manager tracks state but does not yet perform the byte transfer.
-- Android/iOS builds are not part of this Windows beta.
+## Honest limitations
+- **VPN has no bundled provider.** Configure a real tunneling command; VYRO refuses to simulate connections.
+- Chrome Web Store extensions are not supported by the webview engine.
+- DNS leak protection is a flag; the kill switch gates VYRO only, not the OS.
+- Downloads manager tracks state but does not perform the byte transfer yet.
+- Android/iOS are not part of this Windows beta.
 
-Full honesty: see `LIMITATIONS.md` in this folder.
+Full details: `LIMITATIONS.md`.
 
-## Install / run
-1. Install the WebView2 Evergreen runtime if not already present.
-2. Extract `vyro-browser.exe` anywhere and run it.
-3. Close the last tab to close the browser.
-
-Verify the binary with `SHA256SUMS.txt`.
-
-Source: https://github.com/fanomdev/vyro-browser
-License: MPL-2.0
+Requires the WebView2 Evergreen runtime on Windows.
+Source: https://github.com/fanomdev/vyro-browser — License: MPL-2.0

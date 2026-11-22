@@ -61,6 +61,24 @@ Output binaries land in `src-tauri/target/debug/` (dev) or
 `src-tauri/target/release/bundle/` (installers: MSI/NSIS on Windows, .deb/AppImage on
 Linux, .dmg on macOS).
 
+## Packaging the Windows installer and portable ZIP (this machine)
+
+The Tauri CLI is optional here — the release uses NSIS and 7-Zip directly.
+`WebView2Loader.dll` must be packaged next to the EXE or the app will not start.
+
+```powershell
+$src = 'E:\vyro-browser\release\_installer_src'
+Copy-Item E:\vyro-browser\src-tauri\target\debug\vyro-browser.exe "$src\vyro-browser.exe" -Force
+Copy-Item E:\vyro-browser\src-tauri\target\debug\WebView2Loader.dll "$src\WebView2Loader.dll" -Force
+& 'E:\scoop\shims\makensis.exe' "$src\installer.nsi"      # vyro-browser-setup.exe
+& 'E:\scoop\shims\7z.exe' a -tzip 'E:\vyro-browser\release\vyro-browser-portable.zip' `
+    "$src\vyro-browser.exe" "$src\WebView2Loader.dll" "$src\portable" "$src\README.txt"
+```
+
+The `portable` marker makes `platform::data_dir` use `<exe dir>\vyro-data` instead
+of `%LOCALAPPDATA%`, so both formats run from any drive. The NSIS installer shows a
+directory-selection page and writes the marker into the chosen folder.
+
 ## Regenerating icons
 
 The icon set in `src-tauri/icons/` is generated from original geometry:
