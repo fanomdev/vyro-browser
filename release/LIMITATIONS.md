@@ -70,9 +70,10 @@ What is not:
 
 ## 5. Browser features missing
 
-- Downloads work through WebView2's `on_download` hook. Progress is estimated by
-  watching file size (WebView2 reports start/finish only), so percentage updates
-  are approximate until the download finishes.
+- Downloads are transferred by VYRO's own Rust engine (WebView2's download is
+  cancelled and replaced), so size and progress come from `Content-Length` and
+  streamed bytes. Resume uses HTTP Range and depends on the server supporting it;
+  some servers ignore Range and will restart the file.
 - Find-on-page (`Ctrl+F` or toolbar), reader mode, and a tab right-click menu with
   grouping are implemented. Zoom UI, fullscreen, swipe navigation, and automatic
   session restoration are still missing.

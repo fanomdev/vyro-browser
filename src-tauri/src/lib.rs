@@ -8,9 +8,11 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::Command as ProcCommand;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::sync::Mutex;
 use tauri::{
     webview::DownloadEvent, Emitter, LogicalPosition, LogicalSize, Manager, Webview, WebviewUrl, Wry,
@@ -356,6 +358,9 @@ fn load_initial(state: &AppState) {
             }
         }
     }
+    if let Ok(s) = fs::read(dir.join("downloads.json")) {
+        state.downloads.lock().unwrap().import(&String::from_utf8_lossy(&s));
+    }
 }
 
 fn content_size(window: &tauri::Window) -> (f64, f64) {
@@ -446,74 +451,22 @@ async fn new_tab(
                                 .to_string();
                             let target = PathBuf::from(&dir).join(&filename);
                             *destination = target.clone();
-                            let mut downloads = state.downloads.lock().unwrap();
-                            let id = downloads.enqueue(
+                            let id = state.downloads.lock().unwrap().enqueue(
                                 url.to_string(),
                                 filename.clone(),
                                 target.to_string_lossy().into_owned(),
                             );
-                            downloads.start(id);
-                            drop(downloads);
                             let _ = handle.emit(
                                 "vyro://downloads",
                                 json!({ "id": id, "filename": filename, "started": true }),
                             );
-
-                            // WebView2 reports start/finish only; watch the file size
-                            // so the popover can show real progress.
-                            std::thread::spawn(move || {
-                                let state = handle.state::<AppState>();
-                                for _ in 0..600 {
-                                    std::thread::sleep(Duration::from_secs(1));
-                                    let (done, path) = {
-                                        let d = state.downloads.lock().unwrap();
-                                        match d.get(id) {
-                                            Some(item) => (
-                                                matches!(
-                                                    item.state,
-                                                    DownloadState::Completed
-                                                        | DownloadState::Failed(_)
-                                                        | DownloadState::Cancelled
-                                                ),
-                                                item.target_path.clone(),
-                                            ),
-                                            None => (true, String::new()),
-                                        }
-                                    };
-                                    if done {
-                                        break;
-                                    }
-                                    if let Ok(len) = fs::metadata(&path).map(|m| m.len()) {
-                                        state.downloads.lock().unwrap().progress(id, len);
-                                        let _ = handle.emit("vyro://downloads", json!({ "id": id }));
-                                    }
-                                }
-                            });
+                            // VYRO performs the transfer itself so it can report
+                            // exact size, pause and resume. Cancel WebView2's copy.
+                            spawn_download(handle.clone(), id);
+                            false
                         }
-                        DownloadEvent::Finished { url, path, success } => {
-                            let state = handle.state::<AppState>();
-                            let mut downloads = state.downloads.lock().unwrap();
-                            if let Some(item) = downloads
-                                .list()
-                                .iter()
-                                .find(|item| item.url == url.to_string())
-                            {
-                                let id = item.id;
-                                if success {
-                                    if let Some(p) = path {
-                                        downloads.set_total(id, fs::metadata(p).map(|m| m.len()).unwrap_or(0));
-                                    }
-                                    downloads.complete(id);
-                                } else {
-                                    downloads.fail(id, "Download failed");
-                                }
-                            }
-                            drop(downloads);
-                            let _ = handle.emit("vyro://downloads", json!({ "finished": success }));
-                        }
-                        _ => (),
+                        DownloadEvent::Finished { .. } | _ => false,
                     }
-                    true // allow the download to proceed to the chosen path
                 })
                 .auto_resize(),
             LogicalPosition::new(0.0, CHROME_H),
@@ -793,6 +746,132 @@ async fn download_show_in_folder(path: String) -> Result<(), String> {
 #[tauri::command]
 async fn downloads_clear(state: tauri::State<'_, AppState>) -> Result<(), String> {
     state.downloads.lock().unwrap().clear_completed();
+    Ok(())
+}
+
+fn persist_downloads(state: &AppState) {
+    let dir = state.data_dir.lock().unwrap().clone();
+    let json = state.downloads.lock().unwrap().export();
+    let _ = fs::write(dir.join("downloads.json"), json);
+}
+
+/// Stream a file with ureq so VYRO knows the exact size, can pause, and can
+/// resume a partial file with a Range request after a crash or power loss.
+fn spawn_download(app: tauri::AppHandle, id: u64) {
+    std::thread::spawn(move || {
+        let state = app.state::<AppState>();
+        let (url, path, received, filename) = {
+            let d = state.downloads.lock().unwrap();
+            match d.get(id) {
+                Some(item) => (
+                    item.url.clone(),
+                    item.target_path.clone(),
+                    item.received,
+                    item.filename.clone(),
+                ),
+                None => return,
+            }
+        };
+        state.downloads.lock().unwrap().start(id);
+
+        let mut request = ureq::get(&url);
+        if received > 0 {
+            request = request.set("Range", &format!("bytes={}-", received));
+        }
+        let response = match request.call() {
+            Ok(response) => response,
+            Err(error) => {
+                let mut d = state.downloads.lock().unwrap();
+                if d.get(id).map(|x| x.state.clone()) != Some(DownloadState::Paused) {
+                    d.fail(id, error.to_string());
+                }
+                drop(d);
+                persist_downloads(&state);
+                let _ = app.emit("vyro://downloads", json!({ "id": id, "finished": false }));
+                return;
+            }
+        };
+        if let Some(len) = response
+            .header("Content-Length")
+            .and_then(|value| value.parse::<u64>().ok())
+        {
+            let total = if received > 0 {
+                received.saturating_add(len)
+            } else {
+                len
+            };
+            state.downloads.lock().unwrap().set_total(id, total);
+        }
+
+        let mut file = match OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(received > 0)
+            .truncate(received == 0)
+            .open(&path)
+        {
+            Ok(file) => file,
+            Err(error) => {
+                state.downloads.lock().unwrap().fail(id, error.to_string());
+                persist_downloads(&state);
+                return;
+            }
+        };
+        let mut reader = response.into_reader();
+        let mut buffer = [0u8; 65536];
+        let mut written = received;
+        let mut last_save = Instant::now();
+        loop {
+            let read = reader.read(&mut buffer).unwrap_or(0);
+            if read == 0 {
+                break;
+            }
+            let current = state.downloads.lock().unwrap().get(id).map(|x| x.state.clone());
+            match current {
+                Some(DownloadState::Paused) | Some(DownloadState::Cancelled) => break,
+                Some(_) => (),
+                None => return,
+            }
+            if file.write_all(&buffer[..read]).is_err() {
+                break;
+            }
+            written += read as u64;
+            state.downloads.lock().unwrap().progress(id, written);
+            let _ = app.emit("vyro://downloads", json!({ "id": id, "progress": written }));
+            if last_save.elapsed() >= Duration::from_secs(1) {
+                persist_downloads(&state);
+                last_save = Instant::now();
+            }
+        }
+        let finished = state
+            .downloads
+            .lock()
+            .unwrap()
+            .get(id)
+            .map(|x| x.state.clone());
+        if finished == Some(DownloadState::InProgress) {
+            state.downloads.lock().unwrap().complete(id);
+        }
+        persist_downloads(&state);
+        let _ = app.emit(
+            "vyro://downloads",
+            json!({ "id": id, "finished": true, "filename": filename }),
+        );
+    });
+}
+
+#[tauri::command]
+async fn download_pause(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.downloads.lock().unwrap().pause(id);
+    persist_downloads(&state);
+    let _ = app.emit("vyro://downloads", json!({ "id": id, "paused": true }));
+    Ok(())
+}
+
+#[tauri::command]
+async fn download_resume(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.downloads.lock().unwrap().resume(id);
+    spawn_download(app, id);
     Ok(())
 }
 
@@ -1314,7 +1393,14 @@ pub fn run() {
             ..Default::default()
         })
         .setup(|app| {
-            load_initial(&app.state::<AppState>());
+            let state = app.state::<AppState>();
+            load_initial(&state);
+            // Resume downloads interrupted by a crash or power loss.
+            let resumable = state.downloads.lock().unwrap().unfinished_ids();
+            let resume_handle = app.handle().clone();
+            for id in resumable {
+                spawn_download(resume_handle.clone(), id);
+            }
             let window = tauri::window::WindowBuilder::new(app, "main")
                 .title("VYRO Browser — Browse Beyond Limits.")
                 .inner_size(1440.0, 900.0)
@@ -1356,6 +1442,8 @@ pub fn run() {
             downloads_set_dir,
             download_show_in_folder,
             downloads_clear,
+            download_pause,
+            download_resume,
             download_popover,
             open_download_settings,
             blocker_stats,

@@ -25,8 +25,10 @@
   .bar > span { display:block; height:100%; background:var(--accent); border-radius:2px; }
   .bar.wait > span { width:30%; animation:slide 1.1s ease-in-out infinite; }
   @keyframes slide { from{transform:translateX(-100%)} to{transform:translateX(340%)} }
-  .link { border:0; background:transparent; color:var(--cyan); font-size:11px; cursor:pointer; padding:8px 0 0; }
+  .acts { display:flex; justify-content:space-between; gap:8px; margin-top:6px; }
+  .link { border:0; background:transparent; color:var(--cyan); font-size:11px; cursor:pointer; padding:2px 0; }
   .link:hover { text-decoration:underline; }
+  .act { color:var(--accent); }
   .foot { display:flex; justify-content:space-between; gap:8px; padding:8px 10px; border-top:1px solid var(--line); }
   .btn { border:1px solid var(--line); background:transparent; color:var(--text); border-radius:7px;
          padding:7px 10px; font-size:11px; cursor:pointer; }
@@ -56,15 +58,25 @@
         const known = Number(d.total) > 0;
         const pct = known ? Math.min(100, Math.round(d.received/d.total*100)) : 0;
         const label = st==='InProgress' ? 'Downloading' : st==='Completed' ? 'Completed' : st==='Pending' ? 'Pending' : st==='Cancelled' ? 'Cancelled' : 'Failed';
-        const size = known ? pct+'% · '+bytes(d.received)+' / '+bytes(d.total) : bytes(d.received);
+        const size = known ? bytes(d.received)+' / '+bytes(d.total)+' · '+pct+'%' : bytes(d.received)+' · getting size…';
         const fresh = seen.has(d.id) ? '' : (seen.add(d.id), ' new');
+        const canPause = st === 'InProgress' || st === 'Pending';
+        const canResume = st === 'Paused';
+        const toggle = (canPause || canResume)
+          ? '<button class="link act" data-id="'+d.id+'" data-act="'+(canPause?'pause':'resume')+'">'+(canPause?'Pause':'Resume')+'</button>'
+          : '';
         return '<div class="item'+fresh+'"><div class="name" title="'+esc(d.filename)+'">'+esc(d.filename)+'</div>'+
           '<div class="meta"><span>'+label+'</span><span>'+size+'</span></div>'+
           '<div class="bar '+(known?'':'wait')+'"><span style="width:'+(known?pct+'%':'30%')+'"></span></div>'+
-          '<button class="link" data-path="'+esc(d.target_path)+'">Show in folder</button></div>';
+          '<div class="acts">'+toggle+'<button class="link" data-path="'+esc(d.target_path)+'">Show in folder</button></div></div>';
       }).join('') || '<div class="empty">No downloads yet.</div>';
-      document.querySelectorAll('.link').forEach(b => b.onclick = () =>
-        invoke('download_show_in_folder', { path: b.dataset.path }).catch(()=>{}));
+      document.querySelectorAll('.link[data-path]').forEach(b => b.onclick = () =>
+        invoke('download_show_in_folder', { path: b.dataset.path }).catch(e => alert(e)));
+      document.querySelectorAll('.act').forEach(b => b.onclick = async () => {
+        const cmd = b.dataset.act === 'pause' ? 'download_pause' : 'download_resume';
+        await invoke(cmd, { id: Number(b.dataset.id) }).catch(e => alert(e));
+        render();
+      });
     } catch(e) { document.getElementById('items').innerHTML = '<div class="empty">'+esc(e)+'</div>'; }
   }
   document.getElementById('close').onclick = () => invoke('download_popover', { show:false }).catch(()=>{});

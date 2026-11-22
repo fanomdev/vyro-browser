@@ -1,5 +1,6 @@
-//! Download manager state machine. The webview shell performs the byte transfer;
-//! this module owns lifecycle, progress, and cancellation state.
+//! Download manager state machine and persistence. The shell's Rust transfer
+//! engine performs the byte transfer; this module owns lifecycle, progress and
+//! resumable state so interrupted downloads can continue after a restart.
 
 use serde::{Deserialize, Serialize};
 
@@ -7,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub enum DownloadState {
     Pending,
     InProgress,
+    Paused,
     Completed,
     Failed(String),
     Cancelled,
@@ -87,6 +89,35 @@ impl DownloadManager {
         self.set_state(id, DownloadState::Cancelled);
     }
 
+    pub fn pause(&mut self, id: u64) {
+        self.set_state(id, DownloadState::Paused);
+    }
+
+    pub fn resume(&mut self, id: u64) {
+        self.set_state(id, DownloadState::InProgress);
+    }
+
+    /// Persist download state so an interrupted transfer can be resumed.
+    pub fn export(&self) -> String {
+        serde_json::to_string_pretty(&self.items).unwrap_or_default()
+    }
+
+    pub fn import(&mut self, json: &str) {
+        if let Ok(items) = serde_json::from_str::<Vec<Download>>(json) {
+            self.next_id = items.iter().map(|d| d.id + 1).max().unwrap_or(1);
+            self.items = items;
+        }
+    }
+
+    /// Downloads that were active when the app last exited.
+    pub fn unfinished_ids(&self) -> Vec<u64> {
+        self.items
+            .iter()
+            .filter(|d| matches!(d.state, DownloadState::Pending | DownloadState::InProgress))
+            .map(|d| d.id)
+            .collect()
+    }
+
     fn set_state(&mut self, id: u64, state: DownloadState) {
         if let Some(d) = self.items.iter_mut().find(|d| d.id == id) {
             d.state = state;
@@ -133,6 +164,24 @@ mod tests {
         m.complete(id);
         assert_eq!(m.get(id).unwrap().state, DownloadState::Completed);
         assert_eq!(m.active_count(), 0);
+    }
+
+    #[test]
+    fn pause_resume_and_persist() {
+        let mut m = DownloadManager::new();
+        let id = m.enqueue("https://a/f.zip", "f.zip", "/tmp/f.zip");
+        m.start(id);
+        m.progress(id, 500);
+        m.pause(id);
+        assert_eq!(m.get(id).unwrap().state, DownloadState::Paused);
+        let json = m.export();
+        let mut restored = DownloadManager::new();
+        restored.import(&json);
+        assert_eq!(restored.get(id).unwrap().received, 500);
+        assert_eq!(restored.get(id).unwrap().state, DownloadState::Paused);
+        restored.resume(id);
+        assert_eq!(restored.get(id).unwrap().state, DownloadState::InProgress);
+        assert_eq!(restored.unfinished_ids(), vec![id]);
     }
 
     #[test]

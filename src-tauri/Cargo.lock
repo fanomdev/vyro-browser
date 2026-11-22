@@ -4209,6 +4209,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "ureq",
  "url",
  "vyro-core",
 ]
