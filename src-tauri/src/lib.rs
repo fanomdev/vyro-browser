@@ -9,13 +9,17 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command as ProcCommand;
+use std::time::Duration;
 use std::sync::Mutex;
-use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, Webview, WebviewUrl, Wry};
+use tauri::{
+    webview::DownloadEvent, Emitter, LogicalPosition, LogicalSize, Manager, Webview, WebviewUrl, Wry,
+};
 use vyro_core::adblock::{Blocker, ResourceType};
 use vyro_core::bookmarks::BookmarkStore;
 use vyro_core::companions::CompanionManager;
 use vyro_core::safe_browsing::{SafeBrowsing, Verdict};
-use vyro_core::downloads::DownloadManager;
+use vyro_core::downloads::{DownloadManager, DownloadState};
 use vyro_core::engine::{resolve, SearchEngine};
 use vyro_core::extensions::{ExtensionManager, SupportReport};
 use vyro_core::history::History;
@@ -418,10 +422,90 @@ async fn new_tab(
                 .map_err(|e| e.to_string())?,
         )
     };
+    let dl_handle = app.clone();
     let wv = window
         .add_child(
             tauri::webview::WebviewBuilder::new(format!("tab-{}", id), webview_url)
                 .initialization_script(&script)
+                .on_download(move |_webview, event| {
+                    let handle = dl_handle.clone();
+                    match event {
+                        DownloadEvent::Requested { url, destination } => {
+                            let state = handle.state::<AppState>();
+                            let dir = state.settings.lock().unwrap().download_dir.clone();
+                            let filename = destination
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("download")
+                                .to_string();
+                            let target = PathBuf::from(&dir).join(&filename);
+                            *destination = target.clone();
+                            let mut downloads = state.downloads.lock().unwrap();
+                            let id = downloads.enqueue(
+                                url.to_string(),
+                                filename,
+                                target.to_string_lossy().into_owned(),
+                            );
+                            downloads.start(id);
+                            drop(downloads);
+                            let _ = handle.emit("vyro://downloads", json!({ "id": id }));
+
+                            // WebView2 reports start/finish only; watch the file size
+                            // so the popover can show real progress.
+                            std::thread::spawn(move || {
+                                let state = handle.state::<AppState>();
+                                for _ in 0..600 {
+                                    std::thread::sleep(Duration::from_secs(1));
+                                    let (done, path) = {
+                                        let d = state.downloads.lock().unwrap();
+                                        match d.get(id) {
+                                            Some(item) => (
+                                                matches!(
+                                                    item.state,
+                                                    DownloadState::Completed
+                                                        | DownloadState::Failed(_)
+                                                        | DownloadState::Cancelled
+                                                ),
+                                                item.target_path.clone(),
+                                            ),
+                                            None => (true, String::new()),
+                                        }
+                                    };
+                                    if done {
+                                        break;
+                                    }
+                                    if let Ok(len) = fs::metadata(&path).map(|m| m.len()) {
+                                        state.downloads.lock().unwrap().progress(id, len);
+                                        let _ = handle.emit("vyro://downloads", json!({ "id": id }));
+                                    }
+                                }
+                            });
+                        }
+                        DownloadEvent::Finished { url, path, success } => {
+                            let state = handle.state::<AppState>();
+                            let mut downloads = state.downloads.lock().unwrap();
+                            if let Some(item) = downloads
+                                .list()
+                                .iter()
+                                .find(|item| item.url == url.to_string())
+                            {
+                                let id = item.id;
+                                if success {
+                                    if let Some(p) = path {
+                                        downloads.set_total(id, fs::metadata(p).map(|m| m.len()).unwrap_or(0));
+                                    }
+                                    downloads.complete(id);
+                                } else {
+                                    downloads.fail(id, "Download failed");
+                                }
+                            }
+                            drop(downloads);
+                            let _ = handle.emit("vyro://downloads", json!({ "finished": success }));
+                        }
+                        _ => (),
+                    }
+                    true // allow the download to proceed to the chosen path
+                })
                 .auto_resize(),
             LogicalPosition::new(0.0, CHROME_H),
             LogicalSize::new(w, h),
@@ -635,7 +719,56 @@ async fn history_clear(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
 
 #[tauri::command]
 async fn downloads_list(state: tauri::State<'_, AppState>) -> Result<Value, String> {
-    Ok(json!(state.downloads.lock().unwrap().list()))
+    Ok(json!({
+        "items": state.downloads.lock().unwrap().list(),
+        "dir": state.settings.lock().unwrap().download_dir
+    }))
+}
+
+#[tauri::command]
+async fn downloads_set_dir(path: String, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("Download folder cannot be empty".into());
+    }
+    let dir = PathBuf::from(&path);
+    fs::create_dir_all(&dir).map_err(|e| format!("Cannot use that folder: {}", e))?;
+    let mut settings = state.settings.lock().unwrap();
+    settings.download_dir = dir.to_string_lossy().into_owned();
+    let snapshot = settings.clone();
+    drop(settings);
+    persist(&state);
+    emit_state(&app, &state);
+    let _ = snapshot;
+    Ok(())
+}
+
+#[tauri::command]
+async fn download_show_in_folder(path: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        ProcCommand::new("explorer")
+            .arg(format!("/select,{}", path))
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(windows))]
+    {
+        let parent = PathBuf::from(&path)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from(&path));
+        ProcCommand::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn downloads_clear(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.downloads.lock().unwrap().clear_completed();
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1163,6 +1296,9 @@ pub fn run() {
             history_list,
             history_clear,
             downloads_list,
+            downloads_set_dir,
+            download_show_in_folder,
+            downloads_clear,
             blocker_stats,
             blocker_toggle,
             blocker_allow_site,

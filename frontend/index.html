@@ -80,7 +80,7 @@
       <button class="icon-btn" data-panel="extensions" title="Extensions" aria-label="Extensions">
         <svg viewBox="0 0 24 24"><path d="M10 4h4v3h3v4h3v4h-3v3h-4v-3h-4v3H6v-3H3v-4h3V7h4z"/></svg>
       </button>
-      <button class="icon-btn" data-panel="downloads" title="Downloads" aria-label="Downloads">
+      <button id="downloads-btn" class="icon-btn" title="Downloads" aria-label="Downloads">
         <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-5-5m5 5l5-5M5 20h14"/></svg>
       </button>
       <button class="icon-btn" data-panel="vpn" title="VPN" aria-label="VPN">
@@ -93,6 +93,13 @@
         <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
       </button>
     </div>
+  </div>
+
+  <!-- ============ DOWNLOAD POPOVER ============ -->
+  <div id="download-popover" class="download-popover hidden">
+    <div class="dl-head"><strong>Downloads</strong><button id="dl-close" class="dl-close" aria-label="Close downloads">×</button></div>
+    <div id="dl-items" class="dl-items"></div>
+    <div class="dl-foot"><button id="dl-settings" class="btn ghost">Change location</button><button id="dl-clear" class="btn ghost">Clear finished</button></div>
   </div>
 
   <!-- ============ KILL-SWITCH BANNER ============ -->
@@ -290,6 +297,10 @@
         <div class="row"><label>Search engine</label><select id="s-engine"><option value="DuckDuckGo">DuckDuckGo</option><option value="Brave">Brave</option><option value="Google">Google</option><option value="Bing">Bing</option><option value="Startpage">Startpage</option></select></div>
         <label class="row"><span>Restore session on startup</span><input type="checkbox" id="s-restore" class="switch"></label>
         <label class="row"><span>Show bookmarks bar</span><input type="checkbox" id="s-bookmarksbar" class="switch"></label>
+      </div>
+      <div class="card"><h2>Downloads</h2>
+        <div class="row"><label>Save to</label><input id="s-downloaddir" type="text" placeholder="C:\Users\You\Downloads" /></div>
+        <p class="muted">Paste any absolute folder path. The folder is created if it does not exist.</p>
       </div>
       <div class="card"><h2>Privacy &amp; security</h2>
         <label class="row"><span>Tracking protection</span><input type="checkbox" id="s-tracking" class="switch"></label>

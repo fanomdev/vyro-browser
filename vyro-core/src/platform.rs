@@ -59,6 +59,14 @@ fn portable_data_dir(exe_dir: &std::path::Path, app: &str) -> PathBuf {
     exe_dir.join(format!("{}-data", app.to_ascii_lowercase()))
 }
 
+/// Default folder for downloads, from the platform's user profile.
+pub fn downloads_dir() -> PathBuf {
+    match current_os() {
+        Os::Windows => home().join("Downloads"),
+        _ => home().join("Downloads"),
+    }
+}
+
 fn home() -> PathBuf {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))

@@ -19,6 +19,7 @@ Windows desktop beta. This is a working foundation, not a finished Chrome/Brave 
 - Safe Browsing: bundled threat denylist + real Google Safe Browsing API when a key is set.
 - Encrypted password vault (Argon2 + AES-256-GCM), reader mode, find-on-page, tab groups.
 - Bookmarks, history, VPN provider integration with an app-level kill switch.
+- Real downloads: choose any save folder, watch progress in a compact popover, and open the file in Explorer.
 - VYRO companion scripts (first-party alternative to unsupported Chrome extensions).
 
 ## Honest limitations

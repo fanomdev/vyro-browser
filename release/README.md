@@ -26,7 +26,7 @@ extension integration layers are implemented in Rust and covered by 43+ unit tes
 | Per-site allowlisting, global toggle, stats | ✅ Yes | Live counters, top domains, recent blocks |
 | Bookmarks (folders, search, import/export) | ✅ Yes | Netscape HTML import, JSON export |
 | Browsing history | ✅ Yes | Aggregated visits, search, clear |
-| Downloads manager (state) | ⚠️ Partial | Lifecycle/progress state in Rust; byte transfer not yet wired |
+| Downloads | ✅ Working | Real WebView2 download interception, configurable save folder, progress popover and "Show in folder" |
 | Privacy dashboard | ✅ Yes | Protection stats, controls, permissions |
 | Cookie policy, HTTPS upgrades, permissions | ✅ Yes | Core logic implemented and tested |
 | Fingerprinting protection | ✅ In-page mitigations | Canvas/audio/WebGL/screen/navigator entropy reduction via injected script; not a security boundary |

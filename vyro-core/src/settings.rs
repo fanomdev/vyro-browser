@@ -40,11 +40,18 @@ pub struct Settings {
     pub safe_browsing: bool,
     pub block_third_party_cookies: bool,
     pub clear_on_exit: bool,
+    /// Absolute path where downloaded files are saved.
+    #[serde(default = "default_download_dir")]
+    pub download_dir: String,
     // VPN
     pub vpn_provider_id: Option<String>,
     pub vpn_kill_switch: bool,
     pub vpn_dns_leak_protection: bool,
     pub vpn_auto_reconnect: bool,
+}
+
+fn default_download_dir() -> String {
+    crate::platform::downloads_dir().to_string_lossy().into_owned()
 }
 
 impl Default for Settings {
@@ -80,6 +87,7 @@ impl Default for Settings {
             safe_browsing: true,
             block_third_party_cookies: true,
             clear_on_exit: false,
+            download_dir: default_download_dir(),
             vpn_provider_id: None,
             vpn_kill_switch: false,
             vpn_dns_leak_protection: true,

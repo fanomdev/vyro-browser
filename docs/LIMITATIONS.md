@@ -70,8 +70,9 @@ What is not:
 
 ## 5. Browser features missing
 
-- Downloads: lifecycle state exists; actual byte transfer is not wired to the webview
-  download handler.
+- Downloads work through WebView2's `on_download` hook. Progress is estimated by
+  watching file size (WebView2 reports start/finish only), so percentage updates
+  are approximate until the download finishes.
 - Find-on-page (`Ctrl+F` or toolbar), reader mode, and a tab right-click menu with
   grouping are implemented. Zoom UI, fullscreen, swipe navigation, and automatic
   session restoration are still missing.

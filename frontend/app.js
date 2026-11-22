@@ -51,6 +51,10 @@ function listenForState() {
     if (!T.transformCallback) throw new Error('no transformCallback');
     const handler = T.transformCallback(onState);
     await invoke('plugin:event|listen', { event: 'vyro://state', target: { kind: 'Any' }, handler });
+    const dlHandler = T.transformCallback(() => {
+      if (!$('#download-popover').classList.contains('hidden')) renderDownloadPopover();
+    });
+    await invoke('plugin:event|listen', { event: 'vyro://downloads', target: { kind: 'Any' }, handler: dlHandler }).catch(() => {});
   };
   listen().catch(() => setInterval(refreshLight, 1500));
 }
@@ -345,6 +349,37 @@ async function renderDownloads() {
   } catch (e) { toast(e); }
 }
 
+/* --------------------------- downloads popover --------------------------- */
+const fmtBytes = (n) => {
+  n = Number(n) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+  return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+};
+async function renderDownloadPopover() {
+  try {
+    const data = await invoke('downloads_list');
+    if (data.dir) $('#s-downloaddir').value = data.dir;
+    const items = data.items || [];
+    $('#dl-items').innerHTML = items.map(d => {
+      const state = typeof d.state === 'string' ? d.state : Object.keys(d.state)[0];
+      const known = Number(d.total) > 0;
+      const pct = known ? Math.min(100, Math.round(d.received / d.total * 100)) : 0;
+      const label = state === 'InProgress' ? 'Downloading' : state === 'Completed' ? 'Completed' : state === 'Pending' ? 'Pending' : state === 'Cancelled' ? 'Cancelled' : 'Failed';
+      const size = known ? `${pct}% · ${fmtBytes(d.received)} / ${fmtBytes(d.total)}` : fmtBytes(d.received);
+      return `<div class="dl-item">
+        <div class="dl-name" title="${esc(d.filename)}">${esc(d.filename)}</div>
+        <div class="dl-meta"><span>${label}</span><span>${size}</span></div>
+        <div class="dl-bar ${known ? '' : 'indeterminate'}"><span style="width:${known ? pct + '%' : '30%'}"></span></div>
+        <div class="dl-actions"><button class="dl-link" data-path="${esc(d.target_path)}">Show in folder</button></div>
+      </div>`;
+    }).join('') || '<div class="muted" style="padding:12px">No downloads yet.</div>';
+    $$('.dl-link').forEach(b => b.onclick = () =>
+      invoke('download_show_in_folder', { path: b.dataset.path }).catch(e => toast(e)));
+  } catch (e) { toast(e); }
+}
+
 /* --------------------------- vault & companions --------------------------- */
 async function renderVault() {
   try {
@@ -391,6 +426,7 @@ async function renderSettings() {
   $('#s-tracking').checked = !!s.tracking_protection;
   $('#s-safe').checked = !!s.safe_browsing;
   $('#s-clear').checked = !!s.clear_on_exit;
+  $('#s-downloaddir').value = s.download_dir || '';
 }
 const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : 'Dark';
 function applyTheme(s) {
@@ -409,8 +445,12 @@ async function saveSettings() {
   s.tracking_protection = $('#s-tracking').checked;
   s.safe_browsing = $('#s-safe').checked;
   s.clear_on_exit = $('#s-clear').checked;
-  try { await invoke('settings_update', { value: s }); S.settings = s; applyTheme(s); toast('Settings saved'); }
-  catch (e) { toast('Save failed: ' + e); }
+  s.download_dir = $('#s-downloaddir').value.trim() || s.download_dir;
+  try {
+    await invoke('settings_update', { value: s });
+    await invoke('downloads_set_dir', { path: s.download_dir });
+    S.settings = s; applyTheme(s); toast('Settings saved');
+  } catch (e) { toast('Save failed: ' + e); }
 }
 
 /* --------------------------- helpers --------------------------- */
@@ -480,6 +520,18 @@ function bindUI() {
   $('#tab-count').onclick = e => showTabListMenu(e.currentTarget);
   $('#tabs-left').onclick = () => { $('#tabstrip').scrollLeft -= 260; };
   $('#tabs-right').onclick = () => { $('#tabstrip').scrollLeft += 260; };
+  $('#downloads-btn').onclick = () => {
+    const pop = $('#download-popover');
+    const show = pop.classList.contains('hidden');
+    pop.classList.toggle('hidden', !show);
+    if (show) renderDownloadPopover();
+  };
+  $('#dl-close').onclick = () => $('#download-popover').classList.add('hidden');
+  $('#dl-clear').onclick = async () => { await invoke('downloads_clear'); renderDownloadPopover(); };
+  $('#dl-settings').onclick = () => {
+    $('#download-popover').classList.add('hidden');
+    openPanel('settings');
+  };
   $('#nav-back').onclick = goBack;
   $('#nav-forward').onclick = goForward;
   $('#nav-reload').onclick = reload;

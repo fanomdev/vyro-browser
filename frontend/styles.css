@@ -220,6 +220,27 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: v
 .side-foot { position: absolute; bottom: 18px; left: 20px; color: var(--faint); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
 
 /* ---------------- Status, overlays ---------------- */
+.download-popover {
+  position: fixed; top: 100px; right: 16px; width: 360px; max-height: 420px; z-index: 120;
+  background: var(--chrome-2); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden;
+}
+.dl-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.dl-close { border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; }
+.dl-close:hover { color: var(--text); }
+.dl-items { overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 70px; }
+.dl-item { padding: 10px; border-radius: 8px; background: var(--surface); }
+.dl-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-meta { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; margin: 4px 0 6px; font-variant-numeric: tabular-nums; }
+.dl-bar { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.dl-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.dl-bar.indeterminate > span { width: 30%; animation: dlslide 1.1s ease-in-out infinite; }
+@keyframes dlslide { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+.dl-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+.dl-link { border: 0; background: transparent; color: var(--accent-2); font-size: 11px; cursor: pointer; }
+.dl-link:hover { text-decoration: underline; }
+.dl-foot { display: flex; justify-content: space-between; padding: 8px 10px; border-top: 1px solid var(--line); }
+
 .gate-banner {
   display: flex; align-items: center; justify-content: center; gap: 18px;
   padding: 8px 16px; background: var(--surface-2); color: #fca5a5;
