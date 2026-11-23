@@ -273,6 +273,11 @@
         <div class="row"><input id="vault-service" placeholder="Site" /><input id="vault-user" placeholder="Username" /><input id="vault-pass" type="password" placeholder="Password" /><button class="btn" id="vault-add">Save</button></div>
         <div id="vault-list" class="list"></div>
       </div>
+      <div class="card"><h2>Encrypted backup</h2>
+        <p class="muted">Export the encrypted vault file and keep it somewhere safe. Import restores it on any drive or reinstall — only your master password can decrypt it.</p>
+        <div class="row"><button class="btn" id="vault-export">Export backup</button><button class="btn" id="vault-import">Import backup</button></div>
+        <textarea id="vault-backup" rows="5" placeholder="Encrypted vault JSON appears here"></textarea>
+      </div>
     </section>
 
     <section class="panel" data-name="companions">

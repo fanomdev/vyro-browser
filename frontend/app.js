@@ -474,7 +474,6 @@ async function saveSettings() {
     await invoke('settings_update', { value: s });
     await invoke('downloads_set_dir', { path: s.download_dir });
     S.settings = s; applyTheme(s); clearSaveBar();
-    if (activeTab() && !activeTab().url) await reload(S.activeId);
     toast('Settings saved');
   } catch (e) { toast('Save failed: ' + e); }
 }
@@ -722,6 +721,16 @@ function bindUI() {
     catch (e) { toast(e); }
   };
   $('#vault-lock').onclick = async () => { await invoke('vault_lock'); renderVault(); };
+  $('#vault-export').onclick = async () => {
+    try { $('#vault-backup').value = await invoke('vault_export'); toast('Encrypted backup ready — copy it somewhere safe'); }
+    catch (e) { toast(e); }
+  };
+  $('#vault-import').onclick = async () => {
+    try {
+      await invoke('vault_import', { jsonText: $('#vault-backup').value });
+      renderVault(); toast('Vault restored — unlock with its master password');
+    } catch (e) { toast(e); }
+  };
   $('#vault-add').onclick = async () => {
     try {
       await invoke('vault_add', { service: $('#vault-service').value, username: $('#vault-user').value, password: $('#vault-pass').value });

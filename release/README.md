@@ -49,7 +49,7 @@ extension integration layers are implemented in Rust and covered by 43+ unit tes
 - **Privacy dashboard** with live blocked-request counters, allowlisting, custom EasyList-style filters and per-domain statistics.
 - **Fingerprinting mitigations** — navigator, screen, canvas, audio, WebGL and timezone entropy reduction (in-page, best-effort).
 - **Safe Browsing** — bundled threat denylist plus real Google Safe Browsing API v5 checks when `VYRO_SAFE_BROWSING_KEY` is set. No simulated verdicts.
-- **Encrypted password vault** — Argon2 + AES-256-GCM; the master password is never stored.
+- **Encrypted password vault** — Argon2 + AES-256-GCM; master password never stored, with encrypted export/import backup for any drive or reinstall.
 - **Reader mode and find-on-page** — toolbar buttons plus `Ctrl+F`, with match navigation.
 - **Tab groups** via right-click on a tab.
 - **VPN Gate provider** — fetches the live public-server feed, decodes `.ovpn` configs, and launches a real OpenVPN process with country/server selection plus a bundled US sample fallback.

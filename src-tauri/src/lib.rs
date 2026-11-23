@@ -688,6 +688,11 @@ fn ensure_navigate(app: &tauri::AppHandle, state: &AppState, id: u64, url: &str)
 #[tauri::command]
 async fn activity(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     *state.last_activity.lock().unwrap() = Some(Instant::now());
+    // While a dashboard is open the page webviews are intentionally gone.
+    // Creating one here caused a visible freeze and lost input during settings.
+    if !*state.content_visible.lock().unwrap() {
+        return Ok(());
+    }
     if let Some(id) = state.tabs.lock().unwrap().active_id() {
         // Do nothing when the renderer is already live: calling show() on every
         // input steals focus and cancels Tauri's native window drag.
@@ -1269,6 +1274,7 @@ async fn settings_patch(value: Value, app: tauri::AppHandle, state: tauri::State
     *state.settings.lock().unwrap() = updated.clone();
     persist(&state);
     emit_state(&app, &state);
+    let _ = app.emit("vyro://settings-changed", json!({}));
     Ok(updated)
 }
 
@@ -1278,6 +1284,7 @@ async fn settings_update(value: Value, app: tauri::AppHandle, state: tauri::Stat
     *state.settings.lock().unwrap() = updated;
     persist(&state);
     emit_state(&app, &state);
+    let _ = app.emit("vyro://settings-changed", json!({}));
     Ok(())
 }
 
@@ -1600,6 +1607,19 @@ async fn vault_remove(id: u64, state: tauri::State<'_, AppState>) -> Result<(), 
 }
 
 #[tauri::command]
+async fn vault_export(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    state.vault.lock().unwrap().to_json().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn vault_import(json_text: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let vault = Vault::from_json(&json_text).map_err(|e| e.to_string())?;
+    *state.vault.lock().unwrap() = vault;
+    persist(&state);
+    Ok(())
+}
+
+#[tauri::command]
 async fn companion_list(state: tauri::State<'_, AppState>) -> Result<Value, String> {
     Ok(json!({
         "items": state.companions.lock().unwrap().list(),
@@ -1763,6 +1783,8 @@ pub fn run() {
             vault_list,
             vault_reveal,
             vault_remove,
+            vault_export,
+            vault_import,
             companion_list,
             companion_install,
             companion_remove,

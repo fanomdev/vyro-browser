@@ -81,7 +81,7 @@
   const invoke = (c, a={}) => T.invoke ? T.invoke(c, a) : Promise.reject('no ipc');
   const words = { Google: 'Google', Brave: 'Brave', DuckDuckGo: 'DuckDuckGo', VYRO: 'VYRO' };
   const tags = { Google: 'Search the web', Brave: 'Private by default', DuckDuckGo: 'Privacy, simplified', VYRO: 'Browse Beyond Limits.' };
-  (async () => {
+  async function applyStyle() {
     let style = 'VYRO';
     try { const s = await invoke('settings_get'); style = s.interface || 'VYRO'; } catch (_) {}
     const key = { Google: 'google', Brave: 'brave', DuckDuckGo: 'duckduckgo' }[style] || 'vyro';
@@ -89,7 +89,14 @@
     document.getElementById('wordmark').textContent = words[style] || 'VYRO';
     document.getElementById('tagline').textContent = tags[style] || tags.VYRO;
     document.getElementById('q').placeholder = key === 'google' ? 'Search Google or type a URL' : 'Search privately or enter an address';
-  })();
+  }
+  applyStyle();
+  if (T.transformCallback) {
+    invoke('plugin:event|listen', {
+      event: 'vyro://settings-changed', target: { kind: 'Any' },
+      handler: T.transformCallback(() => applyStyle())
+    }).catch(() => setInterval(applyStyle, 2000));
+  } else setInterval(applyStyle, 2000);
   document.getElementById('f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const q = document.getElementById('q');
