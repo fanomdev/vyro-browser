@@ -114,9 +114,10 @@ documented client API. With those, VYRO's existing provider layer can connect fo
   so a hard "100 MB for 10 pages" target is not achievable with genuine web pages.
 - Changing the start-page interface now updates the new-tab page through an event;
   it never reloads or recreates a webview, which previously could freeze input.
-- Background tabs are reloaded when revisited (their webview is destroyed on switch),
-  and the active tab is discarded after 90 seconds of no input. Page state such as
-  scroll position and unsubmitted form data is not preserved across that reload.
+- Background tabs are reloaded when revisited (their webview is destroyed on switch).
+  Page state such as scroll position and unsubmitted form data is not preserved
+  across that reload. The active tab is never discarded while idle, so page
+  timers, downloads and streams keep running.
 - Debug builds are much heavier than release builds; distributed binaries should be
   built with `--release`.
 

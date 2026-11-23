@@ -62,7 +62,7 @@ pub struct AppState {
     /// Downloads popover is its own top-layer child webview so it can float
     /// above the active page webview.
     download_popover: Mutex<Option<TabWebview>>,
-    /// Last user interaction, used to discard an idle active tab's renderer.
+    /// Last user interaction timestamp from the page/chrome input pings.
     last_activity: Mutex<Option<Instant>>,
     /// False while a dashboard panel hides the page webviews.
     content_visible: Mutex<bool>,
@@ -1776,31 +1776,6 @@ pub fn run() {
                 let mb = sample_memory_mb();
                 *memory_handle.state::<AppState>().memory_mb.lock().unwrap() = mb;
                 std::thread::sleep(Duration::from_secs(5));
-            });
-
-            // Idle tab reclamation: after 90s without input, drop the active
-            // renderer. The next user event recreates it from the saved URL.
-            let idle_handle = app.handle().clone();
-            std::thread::spawn(move || loop {
-                std::thread::sleep(Duration::from_secs(15));
-                let idle_state = idle_handle.state::<AppState>();
-                let is_idle = idle_state
-                    .last_activity
-                    .lock()
-                    .unwrap()
-                    .map(|at| at.elapsed() > Duration::from_secs(90))
-                    .unwrap_or(false);
-                if !is_idle {
-                    continue;
-                }
-                let _tab_guard = idle_state.tab_ops.lock().unwrap();
-                let active = idle_state.tabs.lock().unwrap().active_id();
-                if let Some(id) = active {
-                    let _creation_guard = idle_state.webview_creation.lock().unwrap();
-                    if let Some(wv) = idle_state.webviews.lock().unwrap().remove(&id) {
-                        let _ = wv.close();
-                    }
-                }
             });
 
             let window = tauri::window::WindowBuilder::new(app, "main")

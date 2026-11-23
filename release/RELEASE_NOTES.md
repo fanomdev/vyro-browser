@@ -27,6 +27,8 @@ the active tab keeps a WebView2 renderer alive.
 - The window can be dragged by holding the mouse anywhere on the top bar,
   including the tab strip and tabs. Clicking a tab's close button still closes
   it instead of starting a drag.
+- Idle tabs are no longer discarded after 90 seconds, so page timers, streams
+  and downloads keep running while a tab is left alone.
 
 ## What works
 
