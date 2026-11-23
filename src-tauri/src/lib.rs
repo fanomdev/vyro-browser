@@ -309,7 +309,7 @@ fn init_script(blocker: &Blocker, fp: bool, companions: &str) -> String {
     lastPing = now;
     try { window.__TAURI_INTERNALS__.invoke('activity'); } catch (e) {}
   }
-  ['pointerdown','keydown','wheel','touchstart'].forEach(function(ev) {
+  ['pointerup','keydown','wheel','touchend'].forEach(function(ev) {
     document.addEventListener(ev, ping, { passive: true });
   });
 })();
@@ -689,17 +689,19 @@ fn ensure_navigate(app: &tauri::AppHandle, state: &AppState, id: u64, url: &str)
 async fn activity(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     *state.last_activity.lock().unwrap() = Some(Instant::now());
     if let Some(id) = state.tabs.lock().unwrap().active_id() {
-        let url = state
-            .tabs
-            .lock()
-            .unwrap()
-            .get(id)
-            .map(|t| t.url.clone())
-            .unwrap_or_default();
-        create_tab_webview(&app, &state, id, &url)?;
-        // Never let an activity ping restore the page over an open panel —
-        // that was covering the chrome and making every button unclickable.
-        restore_active_webview(&state, id);
+        // Do nothing when the renderer is already live: calling show() on every
+        // input steals focus and cancels Tauri's native window drag.
+        if !state.webviews.lock().unwrap().contains_key(&id) {
+            let url = state
+                .tabs
+                .lock()
+                .unwrap()
+                .get(id)
+                .map(|t| t.url.clone())
+                .unwrap_or_default();
+            create_tab_webview(&app, &state, id, &url)?;
+            restore_active_webview(&state, id);
+        }
     }
     Ok(())
 }

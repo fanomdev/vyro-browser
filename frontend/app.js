@@ -16,7 +16,7 @@ async function boot() {
   bindUI();
   bindTabStripScrolling();
   let lastPing = 0;
-  ['pointerdown', 'keydown', 'wheel'].forEach(ev => document.addEventListener(ev, () => {
+  ['pointerup', 'keydown', 'wheel'].forEach(ev => document.addEventListener(ev, () => {
     const now = Date.now();
     if (now - lastPing < 5000) return;
     lastPing = now;
