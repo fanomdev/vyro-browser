@@ -13,6 +13,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["unstable"] }
+tauri-runtime = "2"
 vyro-core = { path = "../vyro-core" }
 ureq = { version = "2", default-features = false, features = ["tls", "json"] }
 sysinfo = "0.32"

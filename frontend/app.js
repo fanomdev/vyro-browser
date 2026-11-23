@@ -20,7 +20,7 @@ async function boot() {
     const now = Date.now();
     if (now - lastPing < 5000) return;
     lastPing = now;
-    invoke('activity').catch(() => {});
+    invoke('wake_tab').catch(() => {});
   }, { passive: true }));
   await loadAll();
   if (!S.tabs.length) await newTab();
@@ -109,9 +109,15 @@ function renderTabs() {
     el.dataset.tabId = t.id;
     el.className = 'tab' + (t.active ? ' active' : '') + (t.private ? ' private' : '');
     if (!renderedTabIds.has(t.id)) el.classList.add('tab-enter');
-    el.innerHTML = `<span class="fav"></span><span class="label"></span><span class="tab-close" title="Close tab"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>`;
+    el.innerHTML = `<span class="fav"></span><span class="label"></span><span class="tab-close" title="Close tab" data-tauri-drag-region="false"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>`;
     el.querySelector('.label').textContent = (t.group ? t.group + ' · ' : '') + (t.title || t.url || 'New Tab');
-    el.onclick = (e) => { if (e.target.closest('.tab-close')) return; activateTab(t.id); };
+    let downX = 0, downY = 0;
+    el.addEventListener('mousedown', (e) => { downX = e.clientX; downY = e.clientY; });
+    el.onclick = (e) => {
+      if (e.target.closest('.tab-close')) return;
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return; // window drag, not a tab click
+      activateTab(t.id);
+    };
     el.querySelector('.tab-close').onclick = (e) => { e.stopPropagation(); closeTab(t.id); };
     el.oncontextmenu = (e) => { e.preventDefault(); showTabMenu(e.clientX, e.clientY, t.id, t.group); };
     el.addEventListener('mouseenter', async () => {

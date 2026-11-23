@@ -4278,6 +4278,7 @@ dependencies = [
  "sysinfo",
  "tauri",
  "tauri-build",
+ "tauri-runtime",
  "ureq",
  "url",
  "vyro-core",

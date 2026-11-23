@@ -10,8 +10,8 @@
 <div id="browser">
 
   <!-- ============ TITLEBAR / TAB STRIP ============ -->
-  <header class="titlebar" data-tauri-drag-region>
-    <div class="brand" data-tauri-drag-region>
+  <header class="titlebar" data-tauri-drag-region="deep">
+    <div class="brand">
       <svg class="brand-mark" viewBox="0 0 512 512" aria-hidden="true">
         <path d="M112 128 L196 128 L256 380 L176 380 Z" class="grad"/>
         <path d="M316 128 L400 128 L336 380 L256 380 Z" class="grad"/>
@@ -26,7 +26,7 @@
     <button id="tabs-left" class="tab-scroll" title="Scroll tabs left" aria-label="Scroll tabs left">
       <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
     </button>
-    <div id="tabstrip" class="tabstrip" data-tauri-drag-region></div>
+    <div id="tabstrip" class="tabstrip"></div>
     <button id="tabs-right" class="tab-scroll" title="Scroll tabs right" aria-label="Scroll tabs right">
       <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
     </button>

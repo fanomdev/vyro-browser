@@ -17,6 +17,7 @@ use std::sync::Mutex;
 use tauri::{
     webview::DownloadEvent, Emitter, LogicalPosition, LogicalSize, Manager, Webview, WebviewUrl, Wry,
 };
+use tauri_runtime::dpi::{Position, Rect, Size};
 use vyro_core::adblock::{Blocker, ResourceType};
 use vyro_core::bookmarks::BookmarkStore;
 use vyro_core::companions::CompanionManager;
@@ -67,6 +68,11 @@ pub struct AppState {
     content_visible: Mutex<bool>,
     /// WebView2 must not create two child webviews concurrently on Windows.
     webview_creation: Mutex<()>,
+    /// Serializes whole tab operations so a late create cannot resurrect a
+    /// renderer for a tab that was closed while it was in flight.
+    tab_ops: Mutex<()>,
+    /// Refreshed by a background thread; the IPC command never scans processes.
+    memory_mb: Mutex<f64>,
 }
 
 #[derive(Serialize)]
@@ -391,14 +397,33 @@ fn content_size(window: &tauri::Window) -> (f64, f64) {
     )
 }
 
-// Real webview visibility — the old offscreen-bounds trick was unreliable and
-// let page webviews paint over dashboard panels.
+// WebView2's hide() alone is not enough for child webviews: a hidden renderer can
+// still paint over a dashboard. Move it offscreen as well, and restore real bounds
+// when showing it again.
+fn offscreen() -> Rect {
+    Rect {
+        position: Position::Logical(LogicalPosition::new(-10000.0, -10000.0)),
+        size: Size::Logical(LogicalSize::new(1.0, 1.0)),
+    }
+}
+
 fn hide_webview(wv: &TabWebview) {
+    let _ = wv.set_bounds(offscreen());
     let _ = wv.hide();
 }
 
 fn show_webview(wv: &TabWebview) {
+    let _ = wv.set_bounds(offscreen());
     let _ = wv.show();
+    if let Ok(size) = wv.window().inner_size() {
+        let scale = wv.window().scale_factor().unwrap_or(1.0);
+        let width = size.width as f64 / scale;
+        let height = (size.height as f64 / scale - CHROME_H).max(1.0);
+        let _ = wv.set_bounds(Rect {
+            position: Position::Logical(LogicalPosition::new(0.0, CHROME_H)),
+            size: Size::Logical(LogicalSize::new(width, height)),
+        });
+    }
 }
 
 /// Restore a tab only when the chrome is not showing a dashboard panel.
@@ -410,6 +435,28 @@ fn restore_active_webview(state: &AppState, id: u64) {
         } else {
             hide_webview(wv);
         }
+    }
+}
+
+/// Keep exactly one page renderer. Several child webviews at the same bounds
+/// have unreliable z-order on Windows and a stray one can swallow chrome clicks
+/// (including the titlebar drag region).
+fn retain_only_webview(state: &AppState, keep: Option<u64>) {
+    let _creation_guard = state.webview_creation.lock().unwrap();
+    let stale: Vec<TabWebview> = {
+        let mut webviews = state.webviews.lock().unwrap();
+        let ids: Vec<u64> = webviews
+            .keys()
+            .filter(|id| Some(**id) != keep)
+            .copied()
+            .collect();
+        ids.into_iter()
+            .filter_map(|id| webviews.remove(&id))
+            .collect()
+    };
+    for wv in stale {
+        hide_webview(&wv);
+        let _ = wv.close();
     }
 }
 
@@ -522,6 +569,7 @@ async fn new_tab(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<TabView>, String> {
+    let _tab_guard = state.tab_ops.lock().unwrap();
     let private = private.unwrap_or(false);
     let target = url.unwrap_or_default();
     if let Some(pop) = state.download_popover.lock().unwrap().take() {
@@ -529,28 +577,28 @@ async fn new_tab(
     }
     let id = state.tabs.lock().unwrap().open(target.clone(), private);
     create_tab_webview(&app, &state, id, &target)?;
+    retain_only_webview(&state, Some(id));
     emit_state(&app, &state);
     Ok(tab_views(&state))
 }
 
 #[tauri::command]
 async fn close_tab(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<Vec<TabView>, String> {
+    let _tab_guard = state.tab_ops.lock().unwrap();
     state.tabs.lock().unwrap().close(id);
-    {
-        let _creation_guard = state.webview_creation.lock().unwrap();
-        if let Some(wv) = state.webviews.lock().unwrap().remove(&id) {
-            let _ = wv.close();
-        }
-    }
-    if let Some(active) = state.tabs.lock().unwrap().active_id() {
+    let active = state.tabs.lock().unwrap().active_id();
+    if let Some(active) = active {
         let url = state
             .tabs
             .lock()
             .unwrap()
             .get(active)
-            .map(|t| t.url.clone())
+            .map(|tab| tab.url.clone())
             .unwrap_or_default();
         create_tab_webview(&app, &state, active, &url)?;
+    }
+    retain_only_webview(&state, active);
+    if let Some(active) = active {
         restore_active_webview(&state, active);
     }
     emit_state(&app, &state);
@@ -559,23 +607,8 @@ async fn close_tab(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppSt
 
 #[tauri::command]
 async fn activate_tab(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<Vec<TabView>, String> {
+    let _tab_guard = state.tab_ops.lock().unwrap();
     state.tabs.lock().unwrap().set_active(id);
-    let idle: Vec<u64> = state
-        .webviews
-        .lock()
-        .unwrap()
-        .keys()
-        .filter(|key| **key != id)
-        .copied()
-        .collect();
-    {
-        let _creation_guard = state.webview_creation.lock().unwrap();
-        for other in idle {
-            if let Some(wv) = state.webviews.lock().unwrap().remove(&other) {
-                let _ = wv.close();
-            }
-        }
-    }
     let url = state
         .tabs
         .lock()
@@ -584,6 +617,7 @@ async fn activate_tab(id: u64, app: tauri::AppHandle, state: tauri::State<'_, Ap
         .map(|tab| tab.url.clone())
         .unwrap_or_default();
     create_tab_webview(&app, &state, id, &url)?;
+    retain_only_webview(&state, Some(id));
     restore_active_webview(&state, id);
     emit_state(&app, &state);
     Ok(tab_views(&state))
@@ -714,6 +748,43 @@ async fn tor_status(state: tauri::State<'_, AppState>) -> Result<Value, String> 
     }))
 }
 
+/// Restore a discarded renderer after explicit user input in the chrome.
+/// Creation is serialized with every other webview operation.
+#[tauri::command]
+async fn wake_tab(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let _tab_guard = state.tab_ops.lock().unwrap();
+    *state.last_activity.lock().unwrap() = Some(Instant::now());
+    if !*state.content_visible.lock().unwrap() {
+        return Ok(());
+    }
+    if let Some(id) = state.tabs.lock().unwrap().active_id() {
+        // A renderer can be present in the map but parked offscreen after a
+        // tab add/close race. Detect that from its bounds and put it back.
+        let parked = match state.webviews.lock().unwrap().get(&id) {
+            Some(wv) => match wv.bounds() {
+                Ok(Rect { position: Position::Logical(p), .. }) => p.x < 0.0,
+                Ok(Rect { position: Position::Physical(p), .. }) => p.x < 0,
+                Err(_) => true,
+            },
+            None => true,
+        };
+        if parked {
+            if !state.webviews.lock().unwrap().contains_key(&id) {
+                let url = state
+                    .tabs
+                    .lock()
+                    .unwrap()
+                    .get(id)
+                    .map(|t| t.url.clone())
+                    .unwrap_or_default();
+                create_tab_webview(&app, &state, id, &url)?;
+            }
+            restore_active_webview(&state, id);
+        }
+    }
+    Ok(())
+}
+
 /// Navigate a tab, recreating its renderer if an idle discard removed it.
 fn ensure_navigate(app: &tauri::AppHandle, state: &AppState, id: u64, url: &str) -> Result<(), String> {
     create_tab_webview(app, state, id, url)?;
@@ -729,27 +800,10 @@ fn ensure_navigate(app: &tauri::AppHandle, state: &AppState, id: u64, url: &str)
 /// Refreshes the idle timer and restores the active renderer if it was discarded.
 #[tauri::command]
 async fn activity(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    // Only refresh the timer. Recreating a renderer from an input handler
+    // races with tab creation and can leave the UI unresponsive.
+    let _ = &app;
     *state.last_activity.lock().unwrap() = Some(Instant::now());
-    // While a dashboard is open the page webviews are intentionally gone.
-    // Creating one here caused a visible freeze and lost input during settings.
-    if !*state.content_visible.lock().unwrap() {
-        return Ok(());
-    }
-    if let Some(id) = state.tabs.lock().unwrap().active_id() {
-        // Do nothing when the renderer is already live: calling show() on every
-        // input steals focus and cancels Tauri's native window drag.
-        if !state.webviews.lock().unwrap().contains_key(&id) {
-            let url = state
-                .tabs
-                .lock()
-                .unwrap()
-                .get(id)
-                .map(|t| t.url.clone())
-                .unwrap_or_default();
-            create_tab_webview(&app, &state, id, &url)?;
-            restore_active_webview(&state, id);
-        }
-    }
     Ok(())
 }
 
@@ -1069,9 +1123,7 @@ async fn close_app(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Browser process plus its direct renderer children, reported on tab hover.
-#[tauri::command]
-async fn memory_usage() -> Result<Value, String> {
+fn sample_memory_mb() -> f64 {
     use sysinfo::{Pid, System};
     let mut system = System::new_all();
     system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
@@ -1082,7 +1134,14 @@ async fn memory_usage() -> Result<Value, String> {
         .filter(|process| process.pid() == own || process.parent() == Some(own))
         .map(|process| process.memory())
         .sum();
-    Ok(json!({ "mb": (bytes as f64 / 1024.0 / 1024.0).round() }))
+    (bytes as f64 / 1024.0 / 1024.0).round()
+}
+
+/// Instant read from a background sample — scanning processes on demand was
+/// blocking the command queue and freezing the UI.
+#[tauri::command]
+async fn memory_usage(state: tauri::State<'_, AppState>) -> Result<Value, String> {
+    Ok(json!({ "mb": *state.memory_mb.lock().unwrap() }))
 }
 
 #[tauri::command]
@@ -1712,6 +1771,13 @@ pub fn run() {
                 spawn_download(resume_handle.clone(), id);
             }
 
+            let memory_handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                let mb = sample_memory_mb();
+                *memory_handle.state::<AppState>().memory_mb.lock().unwrap() = mb;
+                std::thread::sleep(Duration::from_secs(5));
+            });
+
             // Idle tab reclamation: after 90s without input, drop the active
             // renderer. The next user event recreates it from the saved URL.
             let idle_handle = app.handle().clone();
@@ -1727,6 +1793,7 @@ pub fn run() {
                 if !is_idle {
                     continue;
                 }
+                let _tab_guard = idle_state.tab_ops.lock().unwrap();
                 let active = idle_state.tabs.lock().unwrap().active_id();
                 if let Some(id) = active {
                     let _creation_guard = idle_state.webview_creation.lock().unwrap();
@@ -1766,6 +1833,7 @@ pub fn run() {
             reload,
             set_content_visible,
             activity,
+            wake_tab,
             set_zoom,
             bookmarks_list,
             bookmarks_add,

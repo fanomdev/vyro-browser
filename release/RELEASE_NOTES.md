@@ -1,11 +1,12 @@
-# VYRO Browser — v0.1.0-beta
+# VYRO Browser — v0.1.0 (Stable)
 
 **Browse Beyond Limits.**
 
-Windows desktop beta. This is a working foundation, not a finished Chrome/Brave replacement.
+Windows desktop release. This is the first stable build; the earlier
+`v0.1.0-beta` release remains available for reference.
 
-Built in release/optimized mode: the EXE is ~26 MB (installer ~5 MB) instead of a
-~244 MB debug build, and only the active tab keeps a WebView2 renderer alive.
+Built in release/optimized mode: the EXE is ~26 MB (installer ~5 MB), and only
+the active tab keeps a WebView2 renderer alive.
 
 ## Download the right file
 
@@ -14,7 +15,21 @@ Built in release/optimized mode: the EXE is ~26 MB (installer ~5 MB) instead of 
 
 **Do not download only `vyro-browser.exe`.** It needs `WebView2Loader.dll` in the same folder. The ZIP and installer both include it.
 
+## Fixed in v0.1.0
+
+- Tab add/close no longer leaves the page area blank or unclickable. The active
+  renderer is now restored whenever it is parked offscreen, and only one page
+  renderer stays alive at a time.
+- Rapid tab operations are serialized, so a late create cannot resurrect a
+  renderer for a tab that was already closed.
+- Closing the active tab now restores a working renderer for the tab that
+  becomes active.
+- The window can be dragged by holding the mouse anywhere on the top bar,
+  including the tab strip and tabs. Clicking a tab's close button still closes
+  it instead of starting a drag.
+
 ## What works
+
 - Real webpage rendering (WebView2) with multiple tabs, back/forward, reload, home.
 - Address bar with search-engine selection and HTTPS upgrades.
 - Ad/tracker blocker with EasyList-style rules, exceptions, allowlisting, live counters.
@@ -26,11 +41,12 @@ Built in release/optimized mode: the EXE is ~26 MB (installer ~5 MB) instead of 
 - VYRO companion scripts (first-party alternative to unsupported Chrome extensions).
 
 ## Honest limitations
+
 - **VPN has no bundled provider.** Configure a real tunneling command; VYRO refuses to simulate connections.
 - Chrome Web Store extensions are not supported by the webview engine.
 - DNS leak protection is a flag; the kill switch gates VYRO only, not the OS.
 - Downloads manager tracks state but does not perform the byte transfer yet.
-- Android/iOS are not part of this Windows beta.
+- Android/iOS are not part of this Windows release.
 
 Full details: `LIMITATIONS.md`.
 
