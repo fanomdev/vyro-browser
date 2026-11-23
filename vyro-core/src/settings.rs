@@ -40,6 +40,9 @@ pub struct Settings {
     pub safe_browsing: bool,
     pub block_third_party_cookies: bool,
     pub clear_on_exit: bool,
+    /// Start-page interface style: VYRO, Google, Brave or DuckDuckGo.
+    #[serde(default = "default_interface")]
+    pub interface: String,
     /// Absolute path where downloaded files are saved.
     #[serde(default = "default_download_dir")]
     pub download_dir: String,
@@ -48,6 +51,10 @@ pub struct Settings {
     pub vpn_kill_switch: bool,
     pub vpn_dns_leak_protection: bool,
     pub vpn_auto_reconnect: bool,
+}
+
+fn default_interface() -> String {
+    "VYRO".into()
 }
 
 fn default_download_dir() -> String {
@@ -87,6 +94,7 @@ impl Default for Settings {
             safe_browsing: true,
             block_third_party_cookies: true,
             clear_on_exit: false,
+            interface: default_interface(),
             download_dir: default_download_dir(),
             vpn_provider_id: None,
             vpn_kill_switch: false,

@@ -428,6 +428,7 @@ function markSettingsDirty() {
 function renderSettings() {
   const s = S.settings; if (!s) return;
   setSegment('s-theme', cap(s.theme));
+  setSegment('s-interface', s.interface || 'VYRO');
   setSegment('s-engine', s.search_engine || 'DuckDuckGo');
   $('#s-accent').value = s.accent_color || '#7c5cff';
   $$('#s-swatches .swatch:not(.custom)').forEach(b =>
@@ -450,6 +451,7 @@ function applyTheme(s) {
 async function saveSettings() {
   const s = { ...S.settings };
   s.theme = $('#s-theme button.active')?.dataset.value || 'Dark';
+  s.interface = $('#s-interface button.active')?.dataset.value || 'VYRO';
   s.accent_color = $('#s-accent').value;
   s.homepage = $('#s-home').value;
   s.search_engine = $('#s-engine button.active')?.dataset.value || 'DuckDuckGo';
@@ -462,7 +464,9 @@ async function saveSettings() {
   try {
     await invoke('settings_update', { value: s });
     await invoke('downloads_set_dir', { path: s.download_dir });
-    S.settings = s; applyTheme(s); clearSaveBar(); toast('Settings saved');
+    S.settings = s; applyTheme(s); clearSaveBar();
+    if (activeTab() && !activeTab().url) await reload(S.activeId);
+    toast('Settings saved');
   } catch (e) { toast('Save failed: ' + e); }
 }
 
@@ -638,7 +642,7 @@ function bindUI() {
 
   $('#s-save').onclick = saveSettings;
   $('#s-discard').onclick = () => { renderSettings(); toast('Changes discarded'); };
-  ['s-theme', 's-engine'].forEach(id => {
+  ['s-theme', 's-interface', 's-engine'].forEach(id => {
     $$(`#${id} button`).forEach(b => b.onclick = () => {
       setSegment(id, b.dataset.value);
       markSettingsDirty();

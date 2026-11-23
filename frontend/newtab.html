@@ -5,41 +5,69 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>New Tab — VYRO</title>
 <style>
-  :root { --accent:#7c5cff; --bg:#0b0f19; --surface:#151d2e; --line:rgba(255,255,255,.10);
-          --text:#f1f5f9; --muted:#94a3b8; --font:"Inter","Segoe UI",system-ui,sans-serif; }
-  * { box-sizing:border-box; }
-  body { margin:0; height:100vh; font-family:var(--font); color:var(--text); background:var(--bg);
-         display:flex; align-items:center; justify-content:center; }
-  .wrap { width:min(620px,86vw); display:flex; flex-direction:column; align-items:center; }
-  .mark { width:52px; height:52px; margin-bottom:20px; }
-  .mark path { fill:var(--accent); }
-  .mark .spark { fill:var(--text); }
-  h1 { margin:0; font-size:34px; font-weight:700; letter-spacing:.22em; line-height:1; }
-  .tag { margin:10px 0 32px; color:var(--muted); font-size:11px; letter-spacing:.18em; text-transform:uppercase; }
-  form { width:100%; }
-  input { width:100%; padding:14px 18px; border-radius:8px; border:1px solid var(--line);
-          background:var(--surface); color:var(--text); font:inherit; font-size:14px; outline:none; }
-  input::placeholder { color:#64748b; }
-  input:focus { border-color:var(--accent); }
-  .links { width:100%; display:flex; flex-direction:column; gap:6px; margin-top:20px; border-top:1px solid var(--line); padding-top:16px; }
-  a { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-radius:8px;
-      color:var(--muted); background:var(--surface); text-decoration:none; font-size:13px;
-      transition:background 150ms ease,color 150ms ease; }
-  a:hover { background:#1b2436; color:var(--text); }
-  a span { color:var(--faint); }
-  footer { position:absolute; bottom:24px; color:#64748b; font-size:10px; letter-spacing:.14em; text-transform:uppercase; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: "Inter", "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); display: flex; align-items: center; justify-content: center; transition: background .2s ease, color .2s ease; }
+  .wrap { width: min(620px, 86vw); display: flex; flex-direction: column; align-items: center; }
+  .mark { width: 52px; height: 52px; margin-bottom: 20px; }
+  .mark path { fill: var(--mark); }
+  .mark .spark { fill: var(--spark); }
+  h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: .22em; line-height: 1; color: var(--ink); }
+  .tag { margin: 10px 0 32px; color: var(--muted); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
+  form { width: 100%; display: flex; gap: 8px; }
+  input { flex: 1; min-width: 0; padding: 14px 18px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--field); color: var(--ink); font: inherit; font-size: 14px; outline: none; }
+  input::placeholder { color: var(--muted); }
+  input:focus { border-color: var(--mark); }
+  button.go { border: 0; border-radius: var(--radius); padding: 0 18px; background: var(--mark); color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .links { width: 100%; display: flex; flex-direction: column; gap: 6px; margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+  a { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: var(--ink); background: var(--card); text-decoration: none; font-size: 13px; transition: background 150ms ease; }
+  a:hover { background: var(--hover); }
+  a span { color: var(--muted); }
+  footer { position: absolute; bottom: 20px; color: var(--muted); font-size: 10px; letter-spacing: .06em; text-align: center; }
+
+  /* VYRO — default */
+  .style-vyro { --bg:#0b0f19; --ink:#f1f5f9; --muted:#94a3b8; --line:rgba(255,255,255,.10); --field:#151d2e; --card:#151d2e; --hover:#1b2436; --mark:#7c5cff; --spark:#f1f5f9; --radius:8px; }
+  .style-vyro button.go { display:none; }
+
+  /* Google-style — light, minimal, single rounded search field */
+  .style-google { --bg:#ffffff; --ink:#202124; --muted:#5f6368; --line:#dadce0; --field:#ffffff; --card:#f8f9fa; --hover:#f1f3f4; --mark:#1a73e8; --spark:#4285f4; --radius:24px; }
+  .style-google h1 { font-size: 70px; letter-spacing: -.04em; font-weight: 500; }
+  .style-google .mark { display:none; }
+  .style-google .tag { margin-bottom: 26px; }
+  .style-google input { box-shadow: 0 1px 6px rgba(32,33,36,.18); }
+  .style-google .links { flex-direction: row; border: 0; padding: 0; }
+  .style-google a { width: 74px; height: 74px; flex-direction: column; justify-content: center; gap: 6px; padding: 6px; font-size: 11px; text-align: center; }
+  .style-google a span { display:none; }
+  .style-google a::before { content:''; width: 28px; height: 28px; border-radius: 50%; background: var(--mark); opacity: .85; }
+
+  /* Brave-style — dark card, warm accent */
+  .style-brave { --bg:#17181f; --ink:#f4f5f7; --muted:#a9adba; --line:rgba(255,255,255,.12); --field:#23252f; --card:#23252f; --hover:#2e303c; --mark:#fb542b; --spark:#f4f5f7; --radius:22px; }
+  .style-brave .wrap { padding: 30px; background: var(--card); border-radius: 18px; box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+  .style-brave h1 { letter-spacing: .18em; }
+  .style-brave input { border: 1px solid var(--line); }
+  .style-brave .links { display: grid; grid-template-columns: repeat(2, 1fr); }
+
+  /* DuckDuckGo-style — calm light page with a distinct search action */
+  .style-duckduckgo { --bg:#f5f6f8; --ink:#22252b; --muted:#69707d; --line:#d8dce3; --field:#ffffff; --card:#ffffff; --hover:#eef0f4; --mark:#de5833; --spark:#22252b; --radius:8px; }
+  .style-duckduckgo .mark path { fill: var(--spark); }
+  .style-duckduckgo .mark .spark { fill: var(--mark); }
+  .style-duckduckgo h1 { font-size: 26px; letter-spacing: .02em; }
+  .style-duckduckgo button.go { border-radius: 0 8px 8px 0; margin-left: -10px; }
+  .style-duckduckgo .links { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+
+  @media (prefers-reduced-motion: reduce) { body { transition:none; } }
 </style>
 </head>
-<body>
+<body class="style-vyro">
   <div class="wrap">
     <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
-      <path d="M112 128 L196 128 L256 380 L176 380 Z"/>
-      <path d="M316 128 L400 128 L336 380 L256 380 Z"/>
-      <path class="spark" d="M256 74 L270 100 L256 126 L242 100 Z"/>
+      <path d="M112 128 L196 128 L256 380 L176 380 Z" />
+      <path d="M316 128 L400 128 L336 380 L256 380 Z" />
+      <path class="spark" d="M256 74 L270 100 L256 126 L242 100 Z" />
     </svg>
-    <h1>VYRO</h1>
-    <div class="tag">Browse Beyond Limits.</div>
-    <form id="f"><input id="q" autocomplete="off" spellcheck="false" placeholder="Search privately or enter an address" autofocus /></form>
+    <h1 id="wordmark">VYRO</h1>
+    <div class="tag" id="tagline">Browse Beyond Limits.</div>
+    <form id="f"><input id="q" autocomplete="off" spellcheck="false" placeholder="Search privately or enter an address" autofocus /><button class="go" type="submit" aria-label="Search">Search</button></form>
     <div class="links">
       <a href="https://duckduckgo.com">DuckDuckGo <span>↗</span></a>
       <a href="https://github.com">GitHub <span>↗</span></a>
@@ -47,10 +75,21 @@
       <a href="https://en.wikipedia.org">Wikipedia <span>↗</span></a>
     </div>
   </div>
-  <footer>Privacy-first · Protection active</footer>
+  <footer>Unofficial layout style — not affiliated with the named brands.</footer>
 <script>
   const T = window.__TAURI_INTERNALS__ || {};
-  const invoke = (c,a={}) => T.invoke ? T.invoke(c,a) : Promise.reject('no ipc');
+  const invoke = (c, a={}) => T.invoke ? T.invoke(c, a) : Promise.reject('no ipc');
+  const words = { Google: 'Google', Brave: 'Brave', DuckDuckGo: 'DuckDuckGo', VYRO: 'VYRO' };
+  const tags = { Google: 'Search the web', Brave: 'Private by default', DuckDuckGo: 'Privacy, simplified', VYRO: 'Browse Beyond Limits.' };
+  (async () => {
+    let style = 'VYRO';
+    try { const s = await invoke('settings_get'); style = s.interface || 'VYRO'; } catch (_) {}
+    const key = { Google: 'google', Brave: 'brave', DuckDuckGo: 'duckduckgo' }[style] || 'vyro';
+    document.body.className = 'style-' + key;
+    document.getElementById('wordmark').textContent = words[style] || 'VYRO';
+    document.getElementById('tagline').textContent = tags[style] || tags.VYRO;
+    document.getElementById('q').placeholder = key === 'google' ? 'Search Google or type a URL' : 'Search privately or enter an address';
+  })();
   document.getElementById('f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const q = document.getElementById('q');
