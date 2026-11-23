@@ -65,6 +65,8 @@ pub struct AppState {
     last_activity: Mutex<Option<Instant>>,
     /// False while a dashboard panel hides the page webviews.
     content_visible: Mutex<bool>,
+    /// WebView2 must not create two child webviews concurrently on Windows.
+    webview_creation: Mutex<()>,
 }
 
 #[derive(Serialize)]
@@ -442,6 +444,10 @@ fn create_tab_webview(app: &tauri::AppHandle, state: &AppState, id: u64, url: &s
     if state.webviews.lock().unwrap().contains_key(&id) {
         return Ok(());
     }
+    let _creation_guard = state.webview_creation.lock().unwrap();
+    if state.webviews.lock().unwrap().contains_key(&id) {
+        return Ok(());
+    }
     let fp = state.settings.lock().unwrap().fingerprinting_protection;
     let companion_code = state.companions.lock().unwrap().script_for("*");
     let script = init_script(&state.blocker.lock().unwrap(), fp, &companion_code);
@@ -519,8 +525,11 @@ async fn new_tab(
 #[tauri::command]
 async fn close_tab(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<Vec<TabView>, String> {
     state.tabs.lock().unwrap().close(id);
-    if let Some(wv) = state.webviews.lock().unwrap().remove(&id) {
-        let _ = wv.close();
+    {
+        let _creation_guard = state.webview_creation.lock().unwrap();
+        if let Some(wv) = state.webviews.lock().unwrap().remove(&id) {
+            let _ = wv.close();
+        }
     }
     if let Some(active) = state.tabs.lock().unwrap().active_id() {
         let url = state
@@ -548,9 +557,12 @@ async fn activate_tab(id: u64, app: tauri::AppHandle, state: tauri::State<'_, Ap
         .filter(|key| **key != id)
         .copied()
         .collect();
-    for other in idle {
-        if let Some(wv) = state.webviews.lock().unwrap().remove(&other) {
-            let _ = wv.close();
+    {
+        let _creation_guard = state.webview_creation.lock().unwrap();
+        for other in idle {
+            if let Some(wv) = state.webviews.lock().unwrap().remove(&other) {
+                let _ = wv.close();
+            }
         }
     }
     let url = state
@@ -1686,6 +1698,7 @@ pub fn run() {
                 }
                 let active = idle_state.tabs.lock().unwrap().active_id();
                 if let Some(id) = active {
+                    let _creation_guard = idle_state.webview_creation.lock().unwrap();
                     if let Some(wv) = idle_state.webviews.lock().unwrap().remove(&id) {
                         let _ = wv.close();
                     }
