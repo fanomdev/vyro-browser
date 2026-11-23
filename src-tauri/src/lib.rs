@@ -61,6 +61,8 @@ pub struct AppState {
     /// Downloads popover is its own top-layer child webview so it can float
     /// above the active page webview.
     download_popover: Mutex<Option<TabWebview>>,
+    /// Last user interaction, used to discard an idle active tab's renderer.
+    last_activity: Mutex<Option<Instant>>,
 }
 
 #[derive(Serialize)]
@@ -296,6 +298,18 @@ fn init_script(blocker: &Blocker, fp: bool, companions: &str) -> String {
     document.head.appendChild(s);
     return true;
   };
+
+  /* ---- idle activity ping (throttled) ---- */
+  var lastPing = 0;
+  function ping() {
+    var now = Date.now();
+    if (now - lastPing < 5000) return;
+    lastPing = now;
+    try { window.__TAURI_INTERNALS__.invoke('activity'); } catch (e) {}
+  }
+  ['pointerdown','keydown','wheel','touchstart'].forEach(function(ev) {
+    document.addEventListener(ev, ping, { passive: true });
+  });
 })();
 __VYRO_COMPANIONS__
 "#.to_string();
@@ -650,6 +664,27 @@ async fn set_content_visible(visible: bool, app: tauri::AppHandle, state: tauri:
             show_webview(wv);
         } else {
             hide_webview(wv);
+        }
+    }
+    Ok(())
+}
+
+/// Called (throttled) on user input from both the chrome and page webviews.
+/// Refreshes the idle timer and restores the active renderer if it was discarded.
+#[tauri::command]
+async fn activity(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    *state.last_activity.lock().unwrap() = Some(Instant::now());
+    if let Some(id) = state.tabs.lock().unwrap().active_id() {
+        let url = state
+            .tabs
+            .lock()
+            .unwrap()
+            .get(id)
+            .map(|t| t.url.clone())
+            .unwrap_or_default();
+        create_tab_webview(&app, &state, id, &url)?;
+        if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
+            show_webview(wv);
         }
     }
     Ok(())
@@ -1493,6 +1528,30 @@ pub fn run() {
             for id in resumable {
                 spawn_download(resume_handle.clone(), id);
             }
+
+            // Idle tab reclamation: after 90s without input, drop the active
+            // renderer. The next user event recreates it from the saved URL.
+            let idle_handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(Duration::from_secs(15));
+                let idle_state = idle_handle.state::<AppState>();
+                let is_idle = idle_state
+                    .last_activity
+                    .lock()
+                    .unwrap()
+                    .map(|at| at.elapsed() > Duration::from_secs(90))
+                    .unwrap_or(false);
+                if !is_idle {
+                    continue;
+                }
+                let active = idle_state.tabs.lock().unwrap().active_id();
+                if let Some(id) = active {
+                    if let Some(wv) = idle_state.webviews.lock().unwrap().remove(&id) {
+                        let _ = wv.close();
+                    }
+                }
+            });
+
             let window = tauri::window::WindowBuilder::new(app, "main")
                 .title("VYRO Browser — Browse Beyond Limits.")
                 .inner_size(1440.0, 900.0)
@@ -1522,6 +1581,7 @@ pub fn run() {
             go_forward,
             reload,
             set_content_visible,
+            activity,
             set_zoom,
             bookmarks_list,
             bookmarks_add,

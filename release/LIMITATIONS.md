@@ -97,7 +97,18 @@ documented client API. With those, VYRO's existing provider layer can connect fo
 - **Site permission decisions** are stored and displayed, but camera/mic/location/
   notification requests are not yet intercepted at the webview boundary.
 
-## 5. Browser features missing
+## 5. Memory
+
+- Each active page is a real WebView2 renderer. Even with hidden tabs discarded,
+  WebView2's browser process plus one renderer typically occupies well over 100 MB,
+  so a hard "100 MB for 10 pages" target is not achievable with genuine web pages.
+- Background tabs are reloaded when revisited (their webview is destroyed on switch),
+  and the active tab is discarded after 90 seconds of no input. Page state such as
+  scroll position and unsubmitted form data is not preserved across that reload.
+- Debug builds are much heavier than release builds; distributed binaries should be
+  built with `--release`.
+
+## 6. Browser features missing
 
 - Downloads are transferred by VYRO's own Rust engine (WebView2's download is
   cancelled and replaced), so size and progress come from `Content-Length` and
@@ -110,7 +121,7 @@ documented client API. With those, VYRO's existing provider layer can connect fo
 - Import/export: JSON bookmarks export and Netscape HTML import work; Chrome/Firefox
   full-profile import does not.
 
-## 6. Platform / build
+## 7. Platform / build
 
 - Built and type-checked on Windows with the GNU Rust toolchain. A Windows build needs
   the WebView2 runtime installed.
@@ -121,7 +132,7 @@ documented client API. With those, VYRO's existing provider layer can connect fo
 - Tauri's multi-webview API is behind the `unstable` feature and can change between
   releases; the version is pinned via `Cargo.lock`.
 
-## 7. Stability notes
+## 8. Stability notes
 
 - Opening very many tabs creates one webview per tab; memory use grows accordingly.
 - Dropping a dropdown from the chrome webview over a content webview is constrained by

@@ -102,7 +102,9 @@ documented client API. With those, VYRO's existing provider layer can connect fo
 - Each active page is a real WebView2 renderer. Even with hidden tabs discarded,
   WebView2's browser process plus one renderer typically occupies well over 100 MB,
   so a hard "100 MB for 10 pages" target is not achievable with genuine web pages.
-- Background tabs are reloaded when revisited (their webview is destroyed on switch).
+- Background tabs are reloaded when revisited (their webview is destroyed on switch),
+  and the active tab is discarded after 90 seconds of no input. Page state such as
+  scroll position and unsubmitted form data is not preserved across that reload.
 - Debug builds are much heavier than release builds; distributed binaries should be
   built with `--release`.
 

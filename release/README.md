@@ -85,6 +85,15 @@ Full rationale: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
+## Memory behaviour
+
+VYRO creates one real WebView2 renderer for the **active tab only**. Switching
+tabs discards the previous tab's webview, and a tab left idle for 90 seconds is
+discarded too. Any click, key or wheel event recreates it from its saved URL.
+Ten open tabs therefore cost roughly one renderer, not ten. The tradeoff is that
+background or idle tabs reload when revisited. Release builds are strongly
+recommended over debug builds — they are far smaller and lighter at runtime.
+
 ## Installing on any drive
 
 Download from the [releases page](https://github.com/fanomdev/vyro-browser/releases):
