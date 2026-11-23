@@ -32,6 +32,8 @@
   .link { border:0; background:transparent; color:var(--cyan); font-size:11px; cursor:pointer; padding:2px 0; }
   .link:hover { text-decoration:underline; }
   .act { color:var(--accent); }
+  .cancel { color:#fca5a5; margin-left:10px; }
+  .acts > span { display:flex; align-items:center; }
   .foot { display:flex; justify-content:space-between; gap:8px; padding:8px 10px; border-top:1px solid var(--line); }
   .btn { border:1px solid var(--line); background:transparent; color:var(--text); border-radius:7px;
          padding:7px 10px; font-size:11px; cursor:pointer; }
@@ -68,15 +70,18 @@
         const toggle = (canPause || canResume)
           ? '<button class="link act" data-id="'+d.id+'" data-act="'+(canPause?'pause':'resume')+'">'+(canPause?'Pause':'Resume')+'</button>'
           : '';
+        const cancel = (canPause || canResume)
+          ? '<button class="link cancel" data-id="'+d.id+'" data-act="cancel">Cancel</button>' : '';
         return '<div class="item'+fresh+'"><div class="name" title="'+esc(d.filename)+'">'+esc(d.filename)+'</div>'+
           '<div class="meta"><span>'+label+'</span><span>'+size+'</span></div>'+
           '<div class="bar '+(known?'':'wait')+'"><span style="width:'+(known?pct+'%':'30%')+'"></span></div>'+
-          '<div class="acts">'+toggle+'<button class="link" data-path="'+esc(d.target_path)+'">Show in folder</button></div></div>';
+          '<div class="acts"><span>'+toggle+cancel+'</span><button class="link" data-path="'+esc(d.target_path)+'">Show in folder</button></div></div>';
       }).join('') || '<div class="empty">No downloads yet.</div>';
       document.querySelectorAll('.link[data-path]').forEach(b => b.onclick = () =>
         invoke('download_show_in_folder', { path: b.dataset.path }).catch(e => alert(e)));
-      document.querySelectorAll('.act').forEach(b => b.onclick = async () => {
-        const cmd = b.dataset.act === 'pause' ? 'download_pause' : 'download_resume';
+      document.querySelectorAll('.act, .cancel').forEach(b => b.onclick = async () => {
+        const act = b.dataset.act;
+        const cmd = act === 'pause' ? 'download_pause' : act === 'cancel' ? 'download_cancel' : 'download_resume';
         await invoke(cmd, { id: Number(b.dataset.id) }).catch(e => alert(e));
         render();
       });

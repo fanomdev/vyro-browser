@@ -218,6 +218,13 @@
         Back to browsing
       </button></div>
       <div class="notice" id="ext-support"></div>
+      <div class="card"><h2>Import unpacked Chrome extension</h2>
+        <p class="muted">VYRO can run an extension's content scripts as companions. Chrome APIs, background pages and Web Store updates are not supported.</p>
+        <div class="row"><input id="chrome-ext-path" placeholder="Folder containing manifest.json and JS files" /><input id="chrome-ext-id" placeholder="extension-id" /></div>
+        <textarea id="chrome-ext-manifest" rows="5" placeholder="Paste manifest.json contents"></textarea>
+        <button class="btn primary" id="chrome-ext-import">Import content scripts</button>
+        <p class="muted" id="chrome-ext-result"></p>
+      </div>
       <div class="card"><h2>Installed</h2><div id="ext-list" class="list"></div>
         <div class="row"><input id="ext-manifest" placeholder="Paste manifest.json" /><input id="ext-id" placeholder="extension-id" /><button class="btn" id="ext-install">Install</button></div>
       </div>

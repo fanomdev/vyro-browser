@@ -957,6 +957,22 @@ async fn download_pause(id: u64, app: tauri::AppHandle, state: tauri::State<'_, 
 }
 
 #[tauri::command]
+async fn download_cancel(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let path = {
+        let mut d = state.downloads.lock().unwrap();
+        let path = d.get(id).map(|item| item.target_path.clone()).unwrap_or_default();
+        d.cancel(id);
+        path
+    };
+    if !path.is_empty() {
+        let _ = fs::remove_file(&path);
+    }
+    persist_downloads(&state);
+    let _ = app.emit("vyro://downloads", json!({ "id": id, "cancelled": true }));
+    Ok(())
+}
+
+#[tauri::command]
 async fn download_resume(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     state.downloads.lock().unwrap().resume(id);
     spawn_download(app, id);
@@ -987,6 +1003,39 @@ async fn download_popover(show: bool, app: tauri::AppHandle, state: tauri::State
         .map_err(|e| e.to_string())?;
     *state.download_popover.lock().unwrap() = Some(wv);
     Ok(())
+}
+
+#[tauri::command]
+async fn open_in_system_browser(url: String) -> Result<(), String> {
+    #[cfg(windows)]
+    ProcCommand::new("explorer").arg(&url).spawn().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    ProcCommand::new("open").arg(&url).spawn().map_err(|e| e.to_string())?;
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    ProcCommand::new("xdg-open").arg(&url).spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn close_app(app: tauri::AppHandle) -> Result<(), String> {
+    app.exit(0);
+    Ok(())
+}
+
+/// Browser process plus its direct renderer children, reported on tab hover.
+#[tauri::command]
+async fn memory_usage() -> Result<Value, String> {
+    use sysinfo::{Pid, System};
+    let mut system = System::new_all();
+    system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    let own = Pid::from_u32(std::process::id());
+    let bytes: u64 = system
+        .processes()
+        .values()
+        .filter(|process| process.pid() == own || process.parent() == Some(own))
+        .map(|process| process.memory())
+        .sum();
+    Ok(json!({ "mb": (bytes as f64 / 1024.0 / 1024.0).round() }))
 }
 
 #[tauri::command]
@@ -1139,6 +1188,60 @@ async fn extensions_remove(id: String, app: tauri::AppHandle, state: tauri::Stat
     state.extensions.lock().unwrap().remove(&id).map_err(|e| e.to_string())?;
     emit_state(&app, &state);
     Ok(())
+}
+
+/// Import the content-script portion of an unpacked Chrome extension as VYRO
+/// companions. Background pages and `chrome.*` APIs are NOT supported.
+#[tauri::command]
+async fn chrome_extension_import(
+    manifest_json: String,
+    path: String,
+    id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Value, String> {
+    let record = vyro_core::extensions::parse_manifest(&manifest_json, &path, &id)
+        .map_err(|e| e.to_string())?;
+    let manifest: serde_json::Value =
+        serde_json::from_str(&manifest_json).map_err(|e| e.to_string())?;
+    let dir = PathBuf::from(&path);
+    let mut code = String::new();
+    let mut matches: Vec<String> = Vec::new();
+    let mut scripts = 0;
+    if let Some(list) = manifest.get("content_scripts").and_then(|v| v.as_array()) {
+        for entry in list {
+            if let Some(patterns) = entry.get("matches").and_then(|v| v.as_array()) {
+                for pattern in patterns.iter().filter_map(|p| p.as_str()) {
+                    if !matches.iter().any(|m| m == pattern) {
+                        matches.push(pattern.to_string());
+                    }
+                }
+            }
+            if let Some(files) = entry.get("js").and_then(|v| v.as_array()) {
+                for file in files.iter().filter_map(|f| f.as_str()) {
+                    let full = dir.join(file);
+                    if let Ok(source) = fs::read_to_string(&full) {
+                        code.push_str(&source);
+                        code.push('\n');
+                        scripts += 1;
+                    }
+                }
+            }
+        }
+    }
+    if scripts == 0 {
+        return Err("No readable content scripts found in that extension".into());
+    }
+    state
+        .companions
+        .lock()
+        .unwrap()
+        .install(id, record.name, matches.clone(), code)?;
+    persist(&state);
+    Ok(json!({
+        "imported_content_scripts": scripts,
+        "matches": matches,
+        "unsupported": ["chrome.* APIs", "background scripts", "Chrome Web Store updates"]
+    }))
 }
 
 #[tauri::command]
@@ -1613,8 +1716,12 @@ pub fn run() {
             downloads_clear,
             download_pause,
             download_resume,
+            download_cancel,
             download_popover,
             open_download_settings,
+            open_in_system_browser,
+            close_app,
+            memory_usage,
             blocker_stats,
             blocker_toggle,
             blocker_allow_site,
@@ -1635,6 +1742,7 @@ pub fn run() {
             extensions_toggle,
             extensions_remove,
             extension_support,
+            chrome_extension_import,
             settings_get,
             settings_patch,
             settings_update,

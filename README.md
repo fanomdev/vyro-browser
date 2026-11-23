@@ -58,6 +58,9 @@ extension integration layers are implemented in Rust and covered by 43+ unit tes
 - **Companion extensions** — first-party scripts injected into matching pages, with an honest note that Chrome Web Store APIs are unavailable on webview engines.
 - **Swiss/minimal dark UI** — flat surfaces, no decorative glows, visible focus rings, reduced-motion support, and a light theme.
 - **Choose your start-page interface** — VYRO, Google-style, Brave-style or DuckDuckGo-style layouts, independent of the search-engine setting (original layouts, no copied logos).
+- **Downloads can be cancelled** from the compact popover, alongside pause/resume.
+- **Tab right-click menu** — group tabs, open the tab in your system browser, close the tab, or close VYRO; hovering a tab shows the browser's live RAM usage.
+- **Unpacked Chrome extension import** — content scripts are run as VYRO companions; `chrome.*` APIs and background pages remain unsupported.
 
 See `docs/LIMITATIONS.md` for the features that are still honest gaps.
 

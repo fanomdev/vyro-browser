@@ -90,6 +90,7 @@ async function refreshLight() {
 const activeTab = () => S.tabs.find(t => t.id === S.activeId);
 
 let renderedTabIds = new Set();
+let ramCache = { at: 0, text: '' };
 function renderTabs() {
   const strip = $('#tabstrip');
   const savedScroll = strip.scrollLeft;
@@ -110,6 +111,14 @@ function renderTabs() {
     el.onclick = (e) => { if (e.target.closest('.tab-close')) return; activateTab(t.id); };
     el.querySelector('.tab-close').onclick = (e) => { e.stopPropagation(); closeTab(t.id); };
     el.oncontextmenu = (e) => { e.preventDefault(); showTabMenu(e.clientX, e.clientY, t.id, t.group); };
+    el.addEventListener('mouseenter', async () => {
+      if (Date.now() - ramCache.at < 3000) { el.title = `RAM: ${ramCache.text}`; return; }
+      try {
+        const usage = await invoke('memory_usage');
+        ramCache = { at: Date.now(), text: `${usage.mb} MB (browser + renderers)` };
+        el.title = `RAM: ${ramCache.text}`;
+      } catch (_) {}
+    });
     strip.appendChild(el);
   }
   ghosts.forEach(g => {
@@ -495,7 +504,7 @@ function showTabMenu(x, y, id, group) {
   const menu = document.createElement('div');
   menu.className = 'tab-menu';
   menu.style.left = Math.min(x, window.innerWidth - 210) + 'px';
-  menu.style.top = Math.min(y, window.innerHeight - 170) + 'px';
+  menu.style.top = Math.min(y, window.innerHeight - 280) + 'px';
   const groups = [...new Set(S.tabs.map(t => t.group).filter(Boolean))];
   const items = [
     ['New group…', async () => {
@@ -503,7 +512,12 @@ function showTabMenu(x, y, id, group) {
     }],
     ...groups.map(g => [g, async () => { await invoke('tab_set_group', { id, group: g }); refreshLight(); }]),
     ['Remove from group', async () => { await invoke('tab_set_group', { id, group: null }); refreshLight(); }],
+    ['Open in another browser', async () => {
+      const tab = S.tabs.find(t => t.id === id);
+      if (tab?.url) await invoke('open_in_system_browser', { url: tab.url }).catch(e => toast(e));
+    }],
     ['Close tab', () => closeTab(id)],
+    ['Close VYRO', () => invoke('close_app').catch(() => {})],
   ];
   items.forEach(([label, fn]) => {
     const b = document.createElement('button');
@@ -618,6 +632,17 @@ function bindUI() {
   $('#ext-install').onclick = async () => {
     try { await invoke('extensions_install', { manifest: $('#ext-manifest').value, path: 'unpacked', id: $('#ext-id').value || ('ext-' + Date.now()) }); renderExtensions(); }
     catch (e) { toast(e); }
+  };
+  $('#chrome-ext-import').onclick = async () => {
+    try {
+      const result = await invoke('chrome_extension_import', {
+        manifestJson: $('#chrome-ext-manifest').value,
+        path: $('#chrome-ext-path').value,
+        id: $('#chrome-ext-id').value || ('chrome-ext-' + Date.now())
+      });
+      $('#chrome-ext-result').textContent = `Imported ${result.imported_content_scripts} content script(s). Unsupported: ${result.unsupported.join(', ')}.`;
+      toast('Content scripts imported as companions');
+    } catch (e) { $('#chrome-ext-result').textContent = String(e); toast(e); }
   };
 
   $('#hist-search').onclick = () => renderHistory($('#hist-query').value);

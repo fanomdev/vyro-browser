@@ -9,7 +9,11 @@ If a feature is not listed as working in `README.md`, assume it is not.
   implement Chrome's extension platform**.
 - VYRO can parse `manifest.json`, list/enable/disable unpacked extensions, and show
   their permissions. It **cannot** load `chrome.*` APIs, background service workers,
-  or content scripts, and it **cannot** install extensions from the Chrome Web Store.
+  or install from the Chrome Web Store.
+- Unpacked extensions can be imported for their **content scripts only**, which run as
+  VYRO companions. The import reports which parts are unsupported.
+- The tab-hover RAM tooltip reports the browser process plus its direct child
+  processes — WebView2 does not expose per-tab memory accounting.
 - The UI states this explicitly. No fake extension listings are shown.
 - **Path to real support:** fork Chromium with the extensions service enabled and build
   a Rust bridge to it (materially a separate multi-year project).
