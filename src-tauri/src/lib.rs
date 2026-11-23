@@ -407,32 +407,22 @@ async fn list_tabs(state: tauri::State<'_, AppState>) -> Result<Vec<TabView>, St
     Ok(tab_views(&state))
 }
 
-#[tauri::command]
-async fn new_tab(
-    url: Option<String>,
-    private: Option<bool>,
-    app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
-) -> Result<Vec<TabView>, String> {
-    let private = private.unwrap_or(false);
-    let target = url.unwrap_or_default();
-    if let Some(pop) = state.download_popover.lock().unwrap().take() {
-        let _ = pop.close();
+/// Create (or recreate) one tab webview. Hidden tabs are discarded on switch so
+/// only the active renderer stays in memory — the single biggest RAM saving in a
+/// multi-webview browser.
+fn create_tab_webview(app: &tauri::AppHandle, state: &AppState, id: u64, url: &str) -> Result<(), String> {
+    if state.webviews.lock().unwrap().contains_key(&id) {
+        return Ok(());
     }
-    let id = state.tabs.lock().unwrap().open(target.clone(), private);
     let fp = state.settings.lock().unwrap().fingerprinting_protection;
     let companion_code = state.companions.lock().unwrap().script_for("*");
     let script = init_script(&state.blocker.lock().unwrap(), fp, &companion_code);
-
     let window = app.get_window("main").ok_or("main window missing")?;
     let (w, h) = content_size(&window);
-    let webview_url = if target.is_empty() {
+    let webview_url = if url.is_empty() {
         WebviewUrl::App("newtab.html".into())
     } else {
-        WebviewUrl::External(
-            url::Url::parse(&target)
-                .map_err(|e| e.to_string())?,
-        )
+        WebviewUrl::External(url::Url::parse(url).map_err(|e| e.to_string())?)
     };
     let dl_handle = app.clone();
     let wv = window
@@ -461,8 +451,6 @@ async fn new_tab(
                                 "vyro://downloads",
                                 json!({ "id": id, "filename": filename, "started": true }),
                             );
-                            // VYRO performs the transfer itself so it can report
-                            // exact size, pause and resume. Cancel WebView2's copy.
                             spawn_download(handle.clone(), id);
                             false
                         }
@@ -474,13 +462,24 @@ async fn new_tab(
             LogicalSize::new(w, h),
         )
         .map_err(|e| e.to_string())?;
-
-    for (other_id, other) in state.webviews.lock().unwrap().iter() {
-        if *other_id != id {
-            hide_webview(other);
-        }
-    }
     state.webviews.lock().unwrap().insert(id, wv);
+    Ok(())
+}
+
+#[tauri::command]
+async fn new_tab(
+    url: Option<String>,
+    private: Option<bool>,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<TabView>, String> {
+    let private = private.unwrap_or(false);
+    let target = url.unwrap_or_default();
+    if let Some(pop) = state.download_popover.lock().unwrap().take() {
+        let _ = pop.close();
+    }
+    let id = state.tabs.lock().unwrap().open(target.clone(), private);
+    create_tab_webview(&app, &state, id, &target)?;
     emit_state(&app, &state);
     Ok(tab_views(&state))
 }
@@ -492,6 +491,14 @@ async fn close_tab(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppSt
         let _ = wv.close();
     }
     if let Some(active) = state.tabs.lock().unwrap().active_id() {
+        let url = state
+            .tabs
+            .lock()
+            .unwrap()
+            .get(active)
+            .map(|t| t.url.clone())
+            .unwrap_or_default();
+        create_tab_webview(&app, &state, active, &url)?;
         if let Some(wv) = state.webviews.lock().unwrap().get(&active) {
             show_webview(wv);
         }
@@ -503,12 +510,29 @@ async fn close_tab(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppSt
 #[tauri::command]
 async fn activate_tab(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<Vec<TabView>, String> {
     state.tabs.lock().unwrap().set_active(id);
-    for (tid, wv) in state.webviews.lock().unwrap().iter() {
-        if *tid == id {
-            show_webview(wv);
-        } else {
-            hide_webview(wv);
+    let idle: Vec<u64> = state
+        .webviews
+        .lock()
+        .unwrap()
+        .keys()
+        .filter(|key| **key != id)
+        .copied()
+        .collect();
+    for other in idle {
+        if let Some(wv) = state.webviews.lock().unwrap().remove(&other) {
+            let _ = wv.close();
         }
+    }
+    let url = state
+        .tabs
+        .lock()
+        .unwrap()
+        .get(id)
+        .map(|tab| tab.url.clone())
+        .unwrap_or_default();
+    create_tab_webview(&app, &state, id, &url)?;
+    if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
+        show_webview(wv);
     }
     emit_state(&app, &state);
     Ok(tab_views(&state))
@@ -607,8 +631,20 @@ async fn reload(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState
 /// Dashboards live in the chrome webview, so page webviews are hidden while a
 /// panel is open (otherwise they paint over the panel and swallow its clicks).
 #[tauri::command]
-async fn set_content_visible(visible: bool, _app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+async fn set_content_visible(visible: bool, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let active = state.tabs.lock().unwrap().active_id();
+    if visible {
+        if let Some(id) = active {
+            let url = state
+                .tabs
+                .lock()
+                .unwrap()
+                .get(id)
+                .map(|t| t.url.clone())
+                .unwrap_or_default();
+            create_tab_webview(&app, &state, id, &url)?;
+        }
+    }
     for (id, wv) in state.webviews.lock().unwrap().iter() {
         if visible && Some(*id) == active {
             show_webview(wv);

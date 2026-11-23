@@ -43,7 +43,9 @@ cargo test --manifest-path E:\vyro-browser\vyro-core\Cargo.toml
 # 2. Type-check the desktop shell
 cargo check --manifest-path E:\vyro-browser\src-tauri\Cargo.toml
 
-# 3. Build the desktop binary
+# 3. Build the desktop binary (release for distribution — much smaller/faster)
+cargo build --release --manifest-path E:\vyro-browser\src-tauri\Cargo.toml
+# Debug only, for development:
 cargo build --manifest-path E:\vyro-browser\src-tauri\Cargo.toml
 
 # 4. Install the Tauri CLI for running/bundling

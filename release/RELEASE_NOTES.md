@@ -4,6 +4,9 @@
 
 Windows desktop beta. This is a working foundation, not a finished Chrome/Brave replacement.
 
+Built in release/optimized mode: the EXE is ~26 MB (installer ~5 MB) instead of a
+~244 MB debug build, and only the active tab keeps a WebView2 renderer alive.
+
 ## Download the right file
 
 - **`vyro-browser-setup.exe`** — installer. Choose any drive/folder during setup. Data is stored in a `vyro-data` folder next to the installed EXE, so it works on any drive.
