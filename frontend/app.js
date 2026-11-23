@@ -41,7 +41,7 @@ async function loadAll() {
   } catch (e) { console.warn('VYRO state load failed', e); }
   renderTabs();
   renderAddress();
-  const chip = { DuckDuckGo: 'DDG', Brave: 'BRV', Google: 'GGL', Bing: 'BNG', Startpage: 'SP' };
+  const chip = { DuckDuckGo: 'DDG', Brave: 'BRV', Google: 'GGL', Bing: 'BNG', Startpage: 'SP', Tor: 'TOR' };
   $('#engine-chip').textContent = chip[S.settings?.search_engine] || 'DDG';
 }
 
@@ -58,6 +58,9 @@ function listenForState() {
     if (!T.transformCallback) throw new Error('no transformCallback');
     const handler = T.transformCallback(onState);
     await invoke('plugin:event|listen', { event: 'vyro://state', target: { kind: 'Any' }, handler });
+    const torHandler = T.transformCallback(() =>
+      toast('Tor proxy not found at 127.0.0.1:9050 — start Tor before selecting it'));
+    await invoke('plugin:event|listen', { event: 'vyro://tor-warning', target: { kind: 'Any' }, handler: torHandler }).catch(() => {});
     const settingsHandler = T.transformCallback(() => openPanel('settings'));
     await invoke('plugin:event|listen', { event: 'vyro://open-download-settings', target: { kind: 'Any' }, handler: settingsHandler }).catch(() => {});
     const dlHandler = T.transformCallback(async (payload) => {

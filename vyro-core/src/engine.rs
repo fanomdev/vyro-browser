@@ -13,6 +13,8 @@ pub enum SearchEngine {
     Google,
     Bing,
     Startpage,
+    /// Routes tab traffic through a local Tor SOCKS proxy; clearnet search via DDG.
+    Tor,
 }
 
 impl Default for SearchEngine {
@@ -29,6 +31,7 @@ impl SearchEngine {
             SearchEngine::Google => "Google",
             SearchEngine::Bing => "Bing",
             SearchEngine::Startpage => "Startpage",
+            SearchEngine::Tor => "Tor (SOCKS proxy)",
         }
     }
 
@@ -40,6 +43,7 @@ impl SearchEngine {
             SearchEngine::Google => "https://www.google.com/search?q={}",
             SearchEngine::Bing => "https://www.bing.com/search?q={}",
             SearchEngine::Startpage => "https://www.startpage.com/sp/search?query={}",
+            SearchEngine::Tor => "https://duckduckgo.com/?q={}",
         }
     }
 

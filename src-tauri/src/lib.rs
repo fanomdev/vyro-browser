@@ -458,11 +458,22 @@ fn create_tab_webview(app: &tauri::AppHandle, state: &AppState, id: u64, url: &s
     } else {
         WebviewUrl::External(url::Url::parse(url).map_err(|e| e.to_string())?)
     };
+    let tor_mode = state.settings.lock().unwrap().search_engine == SearchEngine::Tor;
+    let mut builder = tauri::webview::WebviewBuilder::new(format!("tab-{}", id), webview_url)
+        .initialization_script(&script);
+    if tor_mode {
+        if tor_proxy_available() {
+            if let Ok(proxy) = url::Url::parse("socks5://127.0.0.1:9050") {
+                builder = builder.proxy_url(proxy);
+            }
+        } else {
+            let _ = app.emit("vyro://tor-warning", json!({}));
+        }
+    }
     let dl_handle = app.clone();
     let wv = window
         .add_child(
-            tauri::webview::WebviewBuilder::new(format!("tab-{}", id), webview_url)
-                .initialization_script(&script)
+            builder
                 .on_download(move |_webview, event| {
                     let handle = dl_handle.clone();
                     match event {
@@ -682,6 +693,25 @@ async fn set_content_visible(visible: bool, app: tauri::AppHandle, state: tauri:
         }
     }
     Ok(())
+}
+
+fn tor_proxy_available() -> bool {
+    use std::net::{SocketAddr, TcpStream};
+    let addr: SocketAddr = match "127.0.0.1:9050".parse() {
+        Ok(addr) => addr,
+        Err(_) => return false,
+    };
+    TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_ok()
+}
+
+#[tauri::command]
+async fn tor_status(state: tauri::State<'_, AppState>) -> Result<Value, String> {
+    Ok(json!({
+        "available": tor_proxy_available(),
+        "proxy": "socks5://127.0.0.1:9050",
+        "enabled": state.settings.lock().unwrap().search_engine == SearchEngine::Tor,
+        "hint": "Start a Tor daemon with SocksPort 9050 (Tor Browser or tor.exe) before selecting Tor."
+    }))
 }
 
 /// Navigate a tab, recreating its renderer if an idle discard removed it.
@@ -1307,7 +1337,8 @@ async fn engine_engines() -> Result<Value, String> {
         { "id": "brave", "label": "Brave" },
         { "id": "google", "label": "Google" },
         { "id": "bing", "label": "Bing" },
-        { "id": "startpage", "label": "Startpage" }
+        { "id": "startpage", "label": "Startpage" },
+        { "id": "Tor", "label": "Tor (SOCKS proxy)" }
     ]))
 }
 
@@ -1780,6 +1811,7 @@ pub fn run() {
             settings_patch,
             settings_update,
             engine_engines,
+            tor_status,
             set_network_gate,
             safe_browsing_state,
             safe_browsing_toggle,

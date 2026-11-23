@@ -85,6 +85,12 @@ documented client API. With those, VYRO's existing provider layer can connect fo
 
 ## 4. Privacy / security features and their limits
 
+- **Tor is a network, not a search engine.** Selecting Tor applies a SOCKS5 proxy to
+  tab webviews and searches DuckDuckGo over it. It requires a separately installed
+  and running Tor daemon on `127.0.0.1:9050`; VYRO does not bundle Tor and reports
+  honestly when the proxy is absent. Clearnet DuckDuckGo is used because its onion
+  endpoint is not reliably available.
+
 - **Fingerprinting protection** now applies real in-page mitigations (navigator,
   screen, canvas, audio, WebGL, timezone). It is best-effort: a determined script can
   still find entropy, and the injected overrides are not a security boundary.

@@ -57,6 +57,7 @@ extension integration layers are implemented in Rust and covered by 43+ unit tes
 - **Tab strip** — horizontal wheel and drag scrolling, a live tab counter, and enter/exit animations when tabs are added or removed.
 - **Companion extensions** — first-party scripts injected into matching pages, with an honest note that Chrome Web Store APIs are unavailable on webview engines.
 - **Swiss/minimal dark UI** — flat surfaces, no decorative glows, visible focus rings, reduced-motion support, and a light theme.
+- **Tor network mode** — selecting Tor as the search engine routes tab traffic through a local Tor SOCKS proxy (`127.0.0.1:9050`) and searches via DuckDuckGo. VYRO warns if the proxy isn't running; it never labels a non-Tor connection as Tor.
 - **Choose your start-page interface** — VYRO, Google-style, Brave-style or DuckDuckGo-style layouts, independent of the search-engine setting (original layouts, no copied logos).
 - **Downloads can be cancelled** from the compact popover, alongside pause/resume.
 - **Tab right-click menu** — group tabs, open the tab in your system browser, close the tab, or close VYRO; hovering a tab shows the browser's live RAM usage.
