@@ -63,6 +63,8 @@ pub struct AppState {
     download_popover: Mutex<Option<TabWebview>>,
     /// Last user interaction, used to discard an idle active tab's renderer.
     last_activity: Mutex<Option<Instant>>,
+    /// False while a dashboard panel hides the page webviews.
+    content_visible: Mutex<bool>,
 }
 
 #[derive(Serialize)]
@@ -397,6 +399,18 @@ fn show_webview(wv: &TabWebview) {
     let _ = wv.show();
 }
 
+/// Restore a tab only when the chrome is not showing a dashboard panel.
+fn restore_active_webview(state: &AppState, id: u64) {
+    let visible = *state.content_visible.lock().unwrap();
+    if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
+        if visible {
+            show_webview(wv);
+        } else {
+            hide_webview(wv);
+        }
+    }
+}
+
 fn emit_state(app: &tauri::AppHandle, state: &AppState) {
     let blocker = state.blocker.lock().unwrap();
     let payload = json!({
@@ -476,6 +490,10 @@ fn create_tab_webview(app: &tauri::AppHandle, state: &AppState, id: u64, url: &s
             LogicalSize::new(w, h),
         )
         .map_err(|e| e.to_string())?;
+    let visible = *state.content_visible.lock().unwrap();
+    if !visible {
+        hide_webview(&wv);
+    }
     state.webviews.lock().unwrap().insert(id, wv);
     Ok(())
 }
@@ -513,9 +531,7 @@ async fn close_tab(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppSt
             .map(|t| t.url.clone())
             .unwrap_or_default();
         create_tab_webview(&app, &state, active, &url)?;
-        if let Some(wv) = state.webviews.lock().unwrap().get(&active) {
-            show_webview(wv);
-        }
+        restore_active_webview(&state, active);
     }
     emit_state(&app, &state);
     Ok(tab_views(&state))
@@ -545,9 +561,7 @@ async fn activate_tab(id: u64, app: tauri::AppHandle, state: tauri::State<'_, Ap
         .map(|tab| tab.url.clone())
         .unwrap_or_default();
     create_tab_webview(&app, &state, id, &url)?;
-    if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
-        show_webview(wv);
-    }
+    restore_active_webview(&state, id);
     emit_state(&app, &state);
     Ok(tab_views(&state))
 }
@@ -594,10 +608,7 @@ async fn navigate(
 
     state.tabs.lock().unwrap().navigate(id, &url);
     state.history.lock().unwrap().visit(&url, &url);
-    if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
-        let parsed = url::Url::parse(&url).map_err(|e| e.to_string())?;
-        wv.navigate(parsed).map_err(|e| e.to_string())?;
-    }
+    ensure_navigate(&app, &state, id, &url)?;
     persist(&state);
     emit_state(&app, &state);
     Ok(json!({ "blocked": false, "url": url }))
@@ -607,10 +618,7 @@ async fn navigate(
 async fn go_back(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<Value, String> {
     let url = state.tabs.lock().unwrap().back(id);
     if let Some(ref u) = url {
-        if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
-            let parsed = url::Url::parse(u).map_err(|e| e.to_string())?;
-            wv.navigate(parsed).map_err(|e| e.to_string())?;
-        }
+        ensure_navigate(&app, &state, id, u)?;
     }
     emit_state(&app, &state);
     Ok(json!({ "url": url }))
@@ -620,10 +628,7 @@ async fn go_back(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppStat
 async fn go_forward(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<Value, String> {
     let url = state.tabs.lock().unwrap().forward(id);
     if let Some(ref u) = url {
-        if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
-            let parsed = url::Url::parse(u).map_err(|e| e.to_string())?;
-            wv.navigate(parsed).map_err(|e| e.to_string())?;
-        }
+        ensure_navigate(&app, &state, id, u)?;
     }
     emit_state(&app, &state);
     Ok(json!({ "url": url }))
@@ -633,10 +638,7 @@ async fn go_forward(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppS
 async fn reload(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let url = state.tabs.lock().unwrap().get(id).map(|t| t.url.clone());
     if let Some(u) = url.filter(|u| !u.is_empty()) {
-        if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
-            wv.navigate(url::Url::parse(&u).map_err(|e| e.to_string())?)
-                .map_err(|e| e.to_string())?;
-        }
+        ensure_navigate(&app, &state, id, &u)?;
     }
     emit_state(&app, &state);
     Ok(())
@@ -646,6 +648,7 @@ async fn reload(id: u64, app: tauri::AppHandle, state: tauri::State<'_, AppState
 /// panel is open (otherwise they paint over the panel and swallow its clicks).
 #[tauri::command]
 async fn set_content_visible(visible: bool, app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    *state.content_visible.lock().unwrap() = visible;
     let active = state.tabs.lock().unwrap().active_id();
     if visible {
         if let Some(id) = active {
@@ -669,6 +672,17 @@ async fn set_content_visible(visible: bool, app: tauri::AppHandle, state: tauri:
     Ok(())
 }
 
+/// Navigate a tab, recreating its renderer if an idle discard removed it.
+fn ensure_navigate(app: &tauri::AppHandle, state: &AppState, id: u64, url: &str) -> Result<(), String> {
+    create_tab_webview(app, state, id, url)?;
+    restore_active_webview(state, id);
+    if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
+        wv.navigate(url::Url::parse(url).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Called (throttled) on user input from both the chrome and page webviews.
 /// Refreshes the idle timer and restores the active renderer if it was discarded.
 #[tauri::command]
@@ -683,9 +697,9 @@ async fn activity(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> R
             .map(|t| t.url.clone())
             .unwrap_or_default();
         create_tab_webview(&app, &state, id, &url)?;
-        if let Some(wv) = state.webviews.lock().unwrap().get(&id) {
-            show_webview(wv);
-        }
+        // Never let an activity ping restore the page over an open panel —
+        // that was covering the chrome and making every button unclickable.
+        restore_active_webview(&state, id);
     }
     Ok(())
 }
@@ -1517,6 +1531,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState {
             data_dir: Mutex::new(data_dir(APP_NAME)),
+            content_visible: Mutex::new(true),
             ..Default::default()
         })
         .setup(|app| {
